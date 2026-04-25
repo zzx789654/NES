@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SecVision — ISMS Security Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="mock-api.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --font-sans:'IBM Plex Sans',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono','Courier New',monospace;
+  --bg:oklch(0.11 0.012 240);
+  --surface:oklch(0.155 0.012 240);
+  --surface2:oklch(0.195 0.012 240);
+  --border:oklch(0.27 0.012 240);
+  --text:oklch(0.93 0.005 240);
+  --text2:oklch(0.62 0.012 240);
+  --text3:oklch(0.42 0.012 240);
+  --accent:oklch(0.65 0.155 195);
+  --accent-bg:oklch(0.65 0.155 195 / 0.12);
+  --accent-h:oklch(0.72 0.155 195);
+  --critical:oklch(0.60 0.22 25);
+  --critical-bg:oklch(0.60 0.22 25 / 0.15);
+  --high:oklch(0.68 0.20 45);
+  --high-bg:oklch(0.68 0.20 45 / 0.15);
+  --medium:oklch(0.76 0.17 72);
+  --medium-bg:oklch(0.76 0.17 72 / 0.15);
+  --low:oklch(0.70 0.14 195);
+  --low-bg:oklch(0.70 0.14 195 / 0.12);
+  --info:oklch(0.62 0.06 240);
+  --info-bg:oklch(0.62 0.06 240 / 0.12);
+  --success:oklch(0.66 0.15 145);
+  --success-bg:oklch(0.66 0.15 145 / 0.12);
+  --warning:oklch(0.76 0.17 72);
+  --warning-bg:oklch(0.76 0.17 72 / 0.12);
+  --diff-new:oklch(0.60 0.22 25 / 0.18);
+  --diff-resolved:oklch(0.66 0.15 145 / 0.16);
+  --r:8px;--rsm:4px;--rlg:12px;
+  --shadow:0 1px 4px oklch(0 0 0 / 0.35);
+  --shadow-lg:0 4px 20px oklch(0 0 0 / 0.45);
+  --sidebar-w:230px;
+}
+@media(prefers-color-scheme:light){
+  :root{
+    --bg:oklch(0.945 0.006 240);
+    --surface:oklch(1 0 0);
+    --surface2:oklch(0.93 0.007 240);
+    --border:oklch(0.84 0.008 240);
+    --text:oklch(0.16 0.012 240);
+    --text2:oklch(0.44 0.012 240);
+    --text3:oklch(0.64 0.012 240);
+    --accent-bg:oklch(0.65 0.155 195 / 0.10);
+    --shadow:0 1px 4px oklch(0 0 0 / 0.10);
+    --shadow-lg:0 4px 20px oklch(0 0 0 / 0.14);
+    --diff-new:oklch(0.60 0.22 25 / 0.12);
+    --diff-resolved:oklch(0.66 0.15 145 / 0.12);
+  }
+}
+html,body,#root{height:100%;font-family:var(--font-sans);background:var(--bg);color:var(--text);font-size:14px;-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+button{font-family:var(--font-sans);cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font-family:var(--font-sans);color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:var(--rsm);padding:6px 10px;font-size:13px;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+a{color:var(--accent);text-decoration:none}
+.mono{font-family:var(--font-mono)}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="pages/Dashboard.jsx"></script>
+<script type="text/babel" src="pages/VulnScan.jsx"></script>
+<script type="text/babel" src="pages/NIST.jsx"></script>
+<script type="text/babel" src="app.jsx"></script>
+</body>
+</html>
