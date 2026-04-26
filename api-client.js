@@ -32,6 +32,7 @@ const APIClient = (() => {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'HTTP ' + res.status);
     }
+    if (res.status === 204) return null;
     return res.json();
   }
 
@@ -69,7 +70,7 @@ const APIClient = (() => {
     // ─── Dashboard ───────────────────────────────────────────────────────────
 
     getDashboardStats() {
-      return req('/api/dashboard/stats');
+      return req('/api/dashboard');
     },
 
     // ─── Vulnerability Scans ─────────────────────────────────────────────────

@@ -23,7 +23,7 @@ def parse_audit_csv(content: bytes, scan_name: str, scan_date: date | None = Non
                 return c
         return None
 
-    check_col = col(["Check Name", "Policy Value", "check_name", "Name"])
+    check_col = col(["Check Name", "check_name", "Name", "Plugin Name"])
     status_col = col(["Status", "Result", "status"])
     desc_col = col(["Description", "description"])
     policy_col = col(["Policy Value", "Expected Value", "policy_value"])

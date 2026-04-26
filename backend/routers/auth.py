@@ -69,9 +69,18 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
 
 
 @router.post("/register", response_model=UserOut, status_code=201)
-def register(body: UserCreate, db: Session = Depends(get_db)):
+def register(
+    body: UserCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can register new users")
     if db.query(User).filter(User.username == body.username).first():
         raise HTTPException(status_code=409, detail="Username already exists")
+    allowed_roles = {"admin", "analyst", "viewer"}
+    if body.role not in allowed_roles:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {', '.join(allowed_roles)}")
     user = User(username=body.username, hashed_pw=hash_password(body.password), role=body.role)
     db.add(user)
     db.commit()

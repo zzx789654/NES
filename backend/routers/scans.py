@@ -20,6 +20,26 @@ def list_scans(db: Session = Depends(get_db), _=Depends(get_current_user)):
     return db.query(Scan).order_by(Scan.scan_date.desc().nullslast(), Scan.uploaded_at.desc()).all()
 
 
+@router.get("/diff", response_model=ScanDiff)
+def scan_diff(
+    base: int,
+    comp: int,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    base_scan = db.query(Scan).filter(Scan.id == base).first()
+    comp_scan = db.query(Scan).filter(Scan.id == comp).first()
+    if not base_scan or not comp_scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    result = diff_scans(base_scan.vulnerabilities, comp_scan.vulnerabilities)
+    return ScanDiff(
+        base_scan=base_scan,
+        compare_scan=comp_scan,
+        **result,
+    )
+
+
 @router.get("/{scan_id}", response_model=ScanDetail)
 def get_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
     scan = db.query(Scan).filter(Scan.id == scan_id).first()
@@ -98,23 +118,3 @@ async def upload_scan(
     db.commit()
     db.refresh(scan)
     return scan
-
-
-@router.get("/diff", response_model=ScanDiff)
-def scan_diff(
-    base: int,
-    comp: int,
-    db: Session = Depends(get_db),
-    _=Depends(get_current_user),
-):
-    base_scan = db.query(Scan).filter(Scan.id == base).first()
-    comp_scan = db.query(Scan).filter(Scan.id == comp).first()
-    if not base_scan or not comp_scan:
-        raise HTTPException(status_code=404, detail="Scan not found")
-
-    result = diff_scans(base_scan.vulnerabilities, comp_scan.vulnerabilities)
-    return ScanDiff(
-        base_scan=base_scan,
-        compare_scan=comp_scan,
-        **result,
-    )

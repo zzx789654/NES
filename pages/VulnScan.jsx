@@ -280,7 +280,7 @@ function VulnScanPage() {
   const filteredVulns = useMemo(() => {
     return activeVulns
       .filter(v => sevFilter === 'all' || v.risk === sevFilter)
-      .filter(v => !search || v.host.includes(search) || v.name.toLowerCase().includes(search.toLowerCase()) || v.plugin_id.includes(search) || (v.cve||'').includes(search))
+      .filter(v => !search || (v.host||'').includes(search) || (v.name||'').toLowerCase().includes(search.toLowerCase()) || (v.plugin_id||'').includes(search) || (v.cve||'').includes(search))
       .sort((a,b) => (SEV_ORDER[a.risk]??99)-(SEV_ORDER[b.risk]??99));
   }, [activeVulns, sevFilter, search]);
 
