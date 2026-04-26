@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,10 +15,16 @@ app = FastAPI(
     description="Backend API for SecVision ISMS Security Portal",
 )
 
+# ALLOWED_ORIGINS env var: comma-separated list, e.g. "http://localhost:8080,https://example.com"
+# Defaults to "*" for development. allow_credentials requires explicit origins (not "*").
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
+_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+_credentials = "*" not in _origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_origins,
+    allow_credentials=_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

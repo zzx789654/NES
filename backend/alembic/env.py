@@ -16,6 +16,17 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+# Allow DATABASE_URL env var (or .env file via pydantic-settings) to override alembic.ini
+_db_url = os.getenv("DATABASE_URL")
+if not _db_url:
+    try:
+        from config import settings
+        _db_url = settings.database_url
+    except Exception:
+        pass
+if _db_url:
+    config.set_main_option("sqlalchemy.url", _db_url)
+
 target_metadata = Base.metadata
 
 
