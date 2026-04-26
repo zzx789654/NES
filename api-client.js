@@ -91,10 +91,11 @@ const APIClient = (() => {
       return req('/api/scans/diff?base=' + baseId + '&comp=' + compId);
     },
 
-    uploadScan(file, name) {
+    uploadScan(file, name, scanDate) {
       const form = new FormData();
       form.append('file', file);
       if (name) form.append('name', name);
+      if (scanDate) form.append('scan_date', scanDate);
       return fetch('/api/scans/upload', {
         method: 'POST',
         headers: authHeaders(),
@@ -126,10 +127,11 @@ const APIClient = (() => {
       return req('/api/nist/trend');
     },
 
-    uploadAudit(file, name) {
+    uploadAudit(file, name, scanDate) {
       const form = new FormData();
       form.append('file', file);
       if (name) form.append('name', name);
+      if (scanDate) form.append('scan_date', scanDate);
       return fetch('/api/nist/upload', {
         method: 'POST',
         headers: authHeaders(),
