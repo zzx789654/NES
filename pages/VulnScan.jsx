@@ -297,6 +297,27 @@ function VulnScanPage() {
     return { all:diffData.length, new:diffData.filter(d=>d.status==='new').length, resolved:diffData.filter(d=>d.status==='resolved').length, unchanged:diffData.filter(d=>d.status==='unchanged').length };
   }, [diffData]);
 
+  function exportCSV(rows, filename, extraCols) {
+    const VULN_COLS = [
+      { key:'risk', label:'Risk' }, { key:'host', label:'Host' }, { key:'port', label:'Port' },
+      { key:'protocol', label:'Protocol' }, { key:'plugin_id', label:'Plugin ID' },
+      { key:'cve', label:'CVE' }, { key:'cvss', label:'CVSS' }, { key:'epss', label:'EPSS' },
+      { key:'vpr', label:'VPR' }, { key:'name', label:'Name' },
+      { key:'synopsis', label:'Synopsis' }, { key:'solution', label:'Solution' },
+    ];
+    const cols = extraCols ? [...extraCols, ...VULN_COLS] : VULN_COLS;
+    const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const lines = [
+      cols.map(c => c.label).join(','),
+      ...rows.map(r => cols.map(c => esc(r[c.key])).join(',')),
+    ];
+    const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const ALL_COLS = [
     { key:'risk',      label:'嚴重等級' },
     { key:'host',      label:'主機 IP' },
@@ -369,6 +390,7 @@ function VulnScanPage() {
               <span style={{marginLeft:'auto',fontSize:12,color:'var(--text2)',fontFamily:'var(--font-mono)'}}>
                 {filteredVulns.length} 筆{selectedIPs.length>0?` (${selectedIPs.length} IP 篩選中)`:''}
               </span>
+              <Btn size="sm" variant="ghost" onClick={() => exportCSV(filteredVulns, `vulns-${selectedScan}-${new Date().toISOString().slice(0,10)}.csv`)}>↓ CSV</Btn>
             </div>
 
             {/* Column picker */}
@@ -505,6 +527,7 @@ function VulnScanPage() {
                 </select>
               </div>
               <SearchBar value={search} onChange={setSearch} placeholder="搜尋…" />
+              <Btn size="sm" variant="ghost" onClick={() => exportCSV(filteredDiff, `diff-${diffBase}-vs-${diffComp}-${new Date().toISOString().slice(0,10)}.csv`, [{key:'status',label:'Status'}])}>↓ CSV</Btn>
             </div>
             <div style={{display:'flex',gap:10}}>
               {[['all','全部',diffCounts.all,'var(--text)'],['new','新增',diffCounts.new,'var(--critical)'],['resolved','已修復',diffCounts.resolved,'var(--success)'],['unchanged','持續',diffCounts.unchanged,'var(--text2)']].map(([f,label,cnt,color])=>(

@@ -6,15 +6,16 @@
 
 | 頁面 | 功能 |
 |------|------|
+| **Login** | JWT 登入驗證 / Demo 模式（無需後端） |
 | **Dashboard** | 弱點嚴重等級圓餅圖、風險趨勢折線圖、NIST CSF 合規率、SP 800-53 摘要、活動時間線 |
-| **Vulnerability Scan** | Nessus CSV 上傳、EPSS/VPR 四象限風險矩陣、Diff 差異比對、IP 群組多選篩選、IP 歷程追蹤、NVD CVE JSON 上傳 |
+| **Vulnerability Scan** | Nessus CSV 上傳、EPSS/VPR 四象限風險矩陣、Diff 差異比對、IP 群組多選篩選、IP 歷程追蹤、NVD CVE JSON 上傳、**弱點清單 CSV 匯出**、**Diff 結果 CSV 匯出** |
 | **NIST** | Nessus Audit CSV 上傳、PASSED/FAILED 結果檢視、版本 Diff 比對、通過率趨勢圖 |
 
 ---
 
 ## 系統架構圖
 
-### 現行架構（前端靜態版）
+### 現行架構（前端靜態版 + API Client 就緒）
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -26,26 +27,28 @@
 │  └──────┬───────────────────────────────────────────┘   │
 │         │ 載入順序                                        │
 │         ▼                                                │
-│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐   │
-│  │ mock-api.js │  │components.jsx│  │   app.jsx      │   │
-│  │ MockAPI     │  │ 共用 UI 元件  │  │ Sidebar + 路由 │   │
-│  │ singleton   │  │ ChartCanvas  │  │               │   │
-│  │             │  │ DataTable    │  └──────┬────────┘   │
-│  └──────┬──────┘  │ FileUpload…  │         │            │
-│         │         └──────────────┘         │ 路由        │
-│         │                          ┌───────┼───────┐    │
-│         │                          ▼       ▼       ▼    │
-│         │                    ┌─────────┐ ┌──────┐ ┌───┐ │
-│         │◄───── MockAPI ────►│Dashboard│ │Vuln  │ │NIS│ │
-│         │                    │  .jsx   │ │Scan  │ │T  │ │
-│         │                    └─────────┘ │.jsx  │ │.jx│ │
-│         │                               └──────┘ └───┘ │
-│         ▼                                               │
+│  ┌─────────────┐  ┌──────────────┐                       │
+│  │ mock-api.js │  │api-client.js │  ← JWT fetch wrapper  │
+│  │ MockAPI     │  │ APIClient    │    /api/* 真實呼叫     │
+│  │ (Demo 資料)  │  │ singleton   │                       │
+│  └─────────────┘  └──────────────┘                       │
+│         │                                                │
+│         ▼                                                │
+│  ┌──────────────┐  ┌───────────────────────────────┐    │
+│  │components.jsx│  │         app.jsx                │    │
+│  │ 共用 UI 元件  │  │ Auth 狀態 / Sidebar / 路由     │    │
+│  │ DataTable    │  └───────────────┬───────────────┘    │
+│  │ FileUpload…  │         路由      │                    │
+│  └──────────────┘   ┌─────────────┼──────────┐          │
+│                     ▼             ▼          ▼           │
+│              ┌──────────┐ ┌──────────┐ ┌──────────┐     │
+│              │Login.jsx │ │Dashboard │ │VulnScan  │ …   │
+│              │(JWT 登入) │ │  .jsx    │ │  .jsx    │     │
+│              └──────────┘ └──────────┘ └──────────┘     │
+│                                                          │
 │  ┌──────────────────┐                                   │
 │  │   localStorage   │                                   │
-│  │ IP Groups        │                                   │
-│  │ ISO Records      │                                   │
-│  │ OWASP Status     │                                   │
+│  │ IP Groups / ISO  │                                   │
 │  └──────────────────┘                                   │
 └─────────────────────────────────────────────────────────┘
          ▲
@@ -64,10 +67,11 @@
 │                                                                  │
 │   ┌─────────────────────────────────────────────────────────┐   │
 │   │              前端（Static HTML / React）                  │   │
-│   │   index.html · components.jsx · pages/*.jsx              │   │
+│   │   index.html · api-client.js · components.jsx           │   │
+│   │   pages/Login.jsx · pages/Dashboard.jsx · …             │   │
 │   └──────────────────────┬──────────────────────────────────┘   │
 └──────────────────────────│──────────────────────────────────────┘
-                           │ HTTPS / REST API
+                           │ HTTPS / REST API（Bearer JWT）
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Ubuntu 24.04 / 22.04 Server                   │
@@ -78,21 +82,20 @@
 │  └───────────────────────┬──────────────────────────────────┘   │
 │                          │                                       │
 │  ┌───────────────────────▼──────────────────────────────────┐   │
-│  │                 FastAPI (Python)                           │   │
+│  │                 FastAPI (Python 3.11+)                     │   │
 │  │                                                           │   │
-│  │  /api/scans      — 掃描記錄 CRUD                          │   │
-│  │  /api/scans/upload — CSV/JSON 上傳解析                    │   │
-│  │  /api/scans/diff   — 版本 Diff 計算                       │   │
-│  │  /api/nist         — Audit 記錄 CRUD                      │   │
+│  │  /api/auth/token   — JWT 登入                             │   │
+│  │  /api/scans        — 掃描記錄 CRUD + 上傳 + Diff          │   │
+│  │  /api/nist         — Audit 記錄 CRUD + 上傳 + Diff        │   │
 │  │  /api/dashboard    — 統計摘要                             │   │
 │  │  /api/ipgroups     — IP 群組 CRUD                         │   │
 │  └───────────────────────┬──────────────────────────────────┘   │
-│                          │ SQLAlchemy ORM                        │
+│                          │ SQLAlchemy 2.0 ORM                    │
 │  ┌───────────────────────▼──────────────────────────────────┐   │
-│  │              PostgreSQL / SQLite                          │   │
+│  │              PostgreSQL 16 / SQLite（開發）               │   │
 │  │                                                           │   │
-│  │  scans · vulnerabilities · audit_results                 │   │
-│  │  ip_groups · users · activity_log                        │   │
+│  │  scans · vulnerabilities · audit_scans · audit_results   │   │
+│  │  ip_groups · users                                        │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -103,17 +106,41 @@
 
 ```
 NES/
-├── index.html          # 入口：全域樣式、CDN 載入
-├── mock-api.js         # 模擬 REST API（含 EPSS/VPR 富化）
-├── components.jsx      # 共用 UI 元件庫
-├── app.jsx             # App shell：Sidebar + 路由
+├── index.html              # 入口：全域樣式、CDN 載入、script 順序
+├── mock-api.js             # 模擬 REST API（含 EPSS/VPR 富化）
+├── api-client.js           # ★ 真實 API 客戶端（JWT Bearer fetch wrapper）
+├── components.jsx          # 共用 UI 元件庫
+├── app.jsx                 # App shell：Auth 狀態、Sidebar（含登出）、路由
 ├── pages/
-│   ├── Dashboard.jsx   # Dashboard 頁
-│   ├── VulnScan.jsx    # 弱點掃描頁
-│   └── NIST.jsx        # NIST Audit 頁
-├── README.md           # 本文件
-└── 待修改.md           # 待辦改善項目
+│   ├── Login.jsx           # ★ 登入頁（JWT / Demo 模式）
+│   ├── Dashboard.jsx       # Dashboard 頁
+│   ├── VulnScan.jsx        # 弱點掃描頁（含 CSV 匯出）
+│   └── NIST.jsx            # NIST Audit 頁
+├── backend/                # FastAPI 後端（見 backend/README 或 待修改.md）
+├── deploy/
+│   ├── nginx.conf          # ★ Nginx 反向代理設定
+│   ├── secvision.service   # ★ systemd 服務設定
+│   └── install.sh          # ★ Ubuntu 快速部署腳本
+├── README.md               # 本文件
+└── 待修改.md               # 待辦改善項目（進度追蹤）
 ```
+
+> ★ 為本次新增檔案
+
+---
+
+## 認證說明
+
+應用程式啟動時會檢查 `sessionStorage` 中的 JWT token：
+
+- **有 token** → 直接進入主畫面
+- **無 token** → 顯示登入頁
+
+登入頁提供兩種模式：
+| 模式 | 說明 |
+|------|------|
+| 帳號密碼登入 | POST `/api/auth/token`，取得 JWT 存入 `sessionStorage` |
+| Demo 模式 | 設定 `__demo__` 旗標，跳過後端，使用 MockAPI 本地資料 |
 
 ---
 
@@ -129,7 +156,19 @@ python3 -m http.server 8080
 npx serve .
 ```
 
-開啟瀏覽器至 `http://localhost:8080`
+開啟瀏覽器至 `http://localhost:8080`，點選「Demo 模式」即可無需後端體驗完整功能。
+
+---
+
+## 生產環境部署（Ubuntu）
+
+```bash
+# 快速部署（自動安裝依賴、建立資料庫、設定 Nginx + systemd）
+cd deploy/
+sudo bash install.sh
+```
+
+詳細設定請參考 `deploy/nginx.conf` 與 `deploy/secvision.service`。
 
 ---
 
@@ -141,8 +180,11 @@ npx serve .
 | JSX 編譯 | Babel Standalone |
 | 圖表 | Chart.js 4.4.0 |
 | 字體 | IBM Plex Sans / Mono |
-| 持久化（現行） | localStorage |
-| 持久化（目標） | FastAPI + PostgreSQL |
+| 認證 | JWT（python-jose）via `/api/auth/token` |
+| API 客戶端 | `api-client.js`（原生 fetch + Bearer token） |
+| 持久化（Demo） | localStorage / MockAPI |
+| 持久化（生產） | FastAPI + PostgreSQL 16 |
+| 部署 | Nginx + systemd on Ubuntu 24.04 / 22.04 |
 
 ---
 

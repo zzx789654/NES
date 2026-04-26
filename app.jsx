@@ -15,7 +15,7 @@ const NAV = [
   { id:'nist',      label:'NIST', icon:'⬡', sub:'安全框架' },
 ];
 
-function Sidebar({ page, setPage, stats }) {
+function Sidebar({ page, setPage, stats, onLogout }) {
   const counts = {
     dashboard: null,
     vulnscan:  stats ? stats.severityCounts.Critical + stats.severityCounts.High : null,
@@ -74,8 +74,16 @@ function Sidebar({ page, setPage, stats }) {
             <div style={{fontSize:10,color:'var(--text3)'}}>資安管理員</div>
           </div>
         </div>
-        <div style={{marginTop:8,padding:'4px 0',fontSize:11,color:'var(--text3)',borderTop:'1px solid var(--border)',marginTop:10,paddingTop:10,fontFamily:'var(--font-mono)'}}>
-          v2.1.0 · {new Date().toLocaleDateString('zh-TW')}
+        <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div style={{fontSize:11,color:'var(--text3)',fontFamily:'var(--font-mono)'}}>v2.1.0 · {new Date().toLocaleDateString('zh-TW')}</div>
+          {onLogout && (
+            <button onClick={onLogout}
+              style={{fontSize:11,color:'var(--text3)',padding:'3px 8px',borderRadius:'var(--rsm)',border:'1px solid var(--border)',background:'transparent',cursor:'pointer',transition:'all 0.15s'}}
+              onMouseEnter={e => { e.currentTarget.style.color='var(--critical)'; e.currentTarget.style.borderColor='var(--critical)'; }}
+              onMouseLeave={e => { e.currentTarget.style.color='var(--text3)'; e.currentTarget.style.borderColor='var(--border)'; }}>
+              登出
+            </button>
+          )}
         </div>
       </div>
     </aside>
@@ -91,13 +99,24 @@ function applyTweaks(tweaks) {
 }
 
 function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(() => typeof APIClient !== 'undefined' && APIClient.isLoggedIn());
   const [page, setPage] = useState(() => localStorage.getItem('secvision_page') || TWEAK_DEFAULTS.defaultPage);
   const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    function handleUnauth() { setIsLoggedIn(false); }
+    window.addEventListener('secvision:unauthorized', handleUnauth);
+    return () => window.removeEventListener('secvision:unauthorized', handleUnauth);
+  }, []);
 
   useEffect(() => {
     setStats(MockAPI.getDashboardStats());
     applyTweaks(TWEAK_DEFAULTS);
   }, []);
+
+  if (!isLoggedIn) {
+    return <window.LoginPage onLogin={() => setIsLoggedIn(true)} />;
+  }
 
   useEffect(() => {
     localStorage.setItem('secvision_page', page);
@@ -113,7 +132,7 @@ function App() {
 
   return (
     <div style={{display:'flex',height:'100vh',overflow:'hidden'}}>
-      <Sidebar page={page} setPage={setPage} stats={stats} />
+      <Sidebar page={page} setPage={setPage} stats={stats} onLogout={() => { APIClient.logout(); setIsLoggedIn(false); }} />
       <main style={{flex:1,overflow:'auto',background:'var(--bg)',padding:'24px 32px'}}>
         <PageComponent onNavigate={setPage} onStatsChange={() => setStats(MockAPI.getDashboardStats())} />
       </main>

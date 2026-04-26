@@ -1,0 +1,20 @@
+[Unit]
+Description=SecVision FastAPI Backend
+After=network.target postgresql.service
+
+[Service]
+User=secvision
+Group=secvision
+WorkingDirectory=/opt/secvision/backend
+ExecStart=/opt/secvision/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 --workers 2
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# 安全加固
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
