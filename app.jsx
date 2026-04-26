@@ -114,13 +114,13 @@ function App() {
     applyTweaks(TWEAK_DEFAULTS);
   }, []);
 
-  if (!isLoggedIn) {
-    return <window.LoginPage onLogin={() => setIsLoggedIn(true)} />;
-  }
-
   useEffect(() => {
     localStorage.setItem('secvision_page', page);
   }, [page]);
+
+  if (!isLoggedIn) {
+    return <window.LoginPage onLogin={() => setIsLoggedIn(true)} />;
+  }
 
   const PAGE_MAP = {
     dashboard: window.DashboardPage,
