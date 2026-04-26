@@ -107,25 +107,28 @@
 ```
 NES/
 ├── index.html              # 入口：全域樣式、CDN 載入、script 順序
-├── mock-api.js             # 模擬 REST API（含 EPSS/VPR 富化）
-├── api-client.js           # ★ 真實 API 客戶端（JWT Bearer fetch wrapper）
+├── mock-api.js             # 模擬 REST API（含 EPSS/VPR 富化，Demo 用）
+├── api-client.js           # 真實 API 客戶端（JWT Bearer fetch wrapper）
 ├── components.jsx          # 共用 UI 元件庫
 ├── app.jsx                 # App shell：Auth 狀態、Sidebar（含登出）、路由
 ├── pages/
-│   ├── Login.jsx           # ★ 登入頁（JWT / Demo 模式）
+│   ├── Login.jsx           # 登入頁（JWT 登入 / Demo 模式）
 │   ├── Dashboard.jsx       # Dashboard 頁
 │   ├── VulnScan.jsx        # 弱點掃描頁（含 CSV 匯出）
 │   └── NIST.jsx            # NIST Audit 頁
-├── backend/                # FastAPI 後端（見 backend/README 或 待修改.md）
+├── backend/                # FastAPI 後端（Python 3.11 + SQLAlchemy 2.0）
+│   ├── main.py             # FastAPI app 入口
+│   ├── routers/            # scans / nist / dashboard / ipgroups / auth
+│   ├── models/             # SQLAlchemy ORM 模型
+│   ├── services/           # 解析器 + EPSS + Diff 邏輯
+│   └── alembic/            # DB migration
 ├── deploy/
-│   ├── nginx.conf          # ★ Nginx 反向代理設定
-│   ├── secvision.service   # ★ systemd 服務設定
-│   └── install.sh          # ★ Ubuntu 快速部署腳本
+│   ├── nginx.conf          # Nginx 反向代理設定
+│   ├── secvision.service   # systemd 服務設定
+│   └── install.sh          # Ubuntu 快速部署腳本
 ├── README.md               # 本文件
 └── 待修改.md               # 待辦改善項目（進度追蹤）
 ```
-
-> ★ 為本次新增檔案
 
 ---
 
