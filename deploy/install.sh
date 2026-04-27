@@ -96,4 +96,5 @@ echo "   username: ${ADMIN_USER}"
 echo "   password: ${ADMIN_PASS}"
 echo "⚠️  安裝完成後請立即變更預設密碼"
 echo "⚠️  請記得修改 /opt/secvision/backend/.env 中的資料庫密碼與 SECRET_KEY"
+sudo systemctl restart secvision
 
