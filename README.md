@@ -144,6 +144,18 @@ NES/
 
 ---
 
+
+### 初始化第一個管理者帳號（首次部署）
+
+若資料庫還沒有 `users` table 或沒有任何帳號，可在伺服器執行：
+
+```bash
+cd ~/NES/deploy
+sudo bash create-admin.sh admin 'Admin@123456' admin
+```
+
+> 腳本會自動建立資料表（若不存在），並建立或更新該帳號密碼。
+
 ## 本地執行
 
 不需要 build 工具，直接以任意 HTTP 伺服器提供靜態檔案即可：
