@@ -1,20 +1,33 @@
 import sys
 import os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+# 讀取 .env，讓 alembic 在 migration 時也能取得 DATABASE_URL
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
+except ImportError:
+    pass
 
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
 from database import Base
-import models.scan  # noqa: F401
-import models.audit  # noqa: F401
-import models.ipgroup  # noqa: F401
-import models.user  # noqa: F401
+import models.scan    # noqa: F401
+import models.audit   # noqa: F401
+import models.ipgroup # noqa: F401
+import models.user    # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# 優先使用環境變數 DATABASE_URL，其次才用 alembic.ini 的預設值
+database_url = os.environ.get("DATABASE_URL")
+if database_url:
+    config.set_main_option("sqlalchemy.url", database_url)
 
 target_metadata = Base.metadata
 
