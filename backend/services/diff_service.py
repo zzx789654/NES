@@ -25,7 +25,8 @@ def diff_scans(
 
 
 def _audit_key(r: AuditResult) -> str:
-    return r.check_name or str(r.id)
+    # Fall back to "" so unnamed checks from different scans can still match
+    return r.check_name or ""
 
 
 def diff_audits(

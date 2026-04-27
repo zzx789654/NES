@@ -212,6 +212,32 @@ sudo bash install.sh
 
 ---
 
+## QA 測試報告（第二輪，2026-04-27）
+
+以下為第二輪 QA 審查發現並已修復的問題：
+
+| # | 嚴重度 | 檔案 | 問題描述 | 修復方式 |
+|---|--------|------|----------|----------|
+| 1 | 🔴 高 | `deploy/nginx.conf` | 未設定 HTTP→HTTPS 強制跳轉；缺少 `X-Frame-Options`、`X-Content-Type-Options`、`X-XSS-Protection`、`Referrer-Policy`、`Strict-Transport-Security` 等安全標頭；HTTPS server block 完全被註解，等同裸 HTTP 提供 ISMS 服務 | 新增 80 埠 301 重導向 block；啟用 HTTPS server block 並加入五個安全標頭 |
+| 2 | 🔴 高 | `pages/Login.jsx` | 登入頁明文顯示預設憑證 `admin / admin`，對資安管理系統（ISMS）是嚴重的安全反模式，攻擊者一眼即知初始帳密 | 改為「請聯繫系統管理員取得帳號資訊」提示文字，不在前端暴露任何憑證 |
+| 3 | 🟡 中 | `backend/services/diff_service.py` | `_audit_key()` 在 `check_name` 為 `None` 時回退至 `str(r.id)`；由於 DB 自動遞增 ID 在不同掃描中各自獨立，同一筆匿名檢查項目的 base 與 compare ID 絕不相同，造成 diff 將其誤判為「新增失敗」而非「持續失敗」 | 回退改為空字串 `""`，使匿名項目能在跨掃描比對時正確合併 |
+| 4 | 🟡 中 | `pages/VulnScan.jsx` | 弱點詳情展開列與優先修補清單 CVSS 欄位使用 `\|\|` 做顯示回退，當 CVSS 合法值為 `0` 時被視為 falsy 而錯誤顯示 `—` | 改用 `??`（nullish coalescing），只有 `null`/`undefined` 才顯示 `—` |
+| 5 | 🟡 中 | `backend/services/cve_parser.py` | NVD JSON 解析時 synopsis 截斷至 300 字元但未加 `…`，使用者無從得知內容被截斷 | 截斷後補上 `…` 省略號 |
+| 6 | 🟢 低 | `backend/services/epss_service.py` | `except Exception: pass` 靜默吞掉所有 EPSS API 錯誤，管理員無法得知 EPSS 富化失敗的原因（網路、限速等） | 改為 `logger.warning(...)` 輸出帶有 chunk index 與例外訊息的警告，便於排查 |
+| 7 | 🟢 低 | `deploy/secvision.service` | `Restart=always` 搭配固定 `RestartSec=5` 且無重啟次數上限，若資料庫長時間離線會觸發無限重啟風暴，耗盡系統資源 | 改為 `Restart=on-failure`，並加入 `StartLimitBurst=5` / `StartLimitIntervalSec=60`，60 秒內重啟超過 5 次則停止服務 |
+
+### 修復前後對照
+
+**Bug 3（audit diff ID 碰撞）影響範圍：**
+- NIST 頁面版本 Diff 比對：`check_name` 為空的項目永遠出現在「新增失敗」清單而非「持續失敗」
+- 可能誇大 `new_failures` 計數，使趨勢圖失真
+
+**Bug 4（CVSS falsy-0）影響範圍：**
+- CVSS = 0.0 的弱點（部分資訊類外掛）在展開詳情與優先修補清單中顯示 `—` 而非 `0`
+- 不影響邏輯計算，但視覺呈現錯誤
+
+---
+
 ## 授權
 
 Internal use only.

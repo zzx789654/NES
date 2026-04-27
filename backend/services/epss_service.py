@@ -1,5 +1,9 @@
 """Fetch EPSS scores from FIRST.org API."""
+import logging
+
 import httpx
+
+logger = logging.getLogger(__name__)
 
 EPSS_API = "https://api.first.org/data/1.0/epss"
 
@@ -29,7 +33,7 @@ async def fetch_epss_scores(cves: list[str]) -> dict[str, float]:
                     epss = item.get("epss")
                     if cve_id and epss is not None:
                         results[cve_id.upper()] = round(float(epss), 4)
-            except Exception:
-                pass  # EPSS enrichment is best-effort
+            except Exception as exc:
+                logger.warning("EPSS fetch failed for chunk %d: %s", i, exc)
 
     return results

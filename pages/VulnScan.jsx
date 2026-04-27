@@ -433,7 +433,7 @@ function VulnScanPage() {
                   <div>
                     <SectionDivider label="基本資訊" />
                     <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                      {[['主機 IP',expandedRow.host],['連接埠',expandedRow.port+'/'+expandedRow.protocol],['Plugin ID',expandedRow.plugin_id],['CVE',expandedRow.cve||'—'],['CVSS',expandedRow.cvss||'—'],['EPSS',expandedRow.epss!=null?expandedRow.epss.toFixed(4):'—'],['VPR',expandedRow.vpr!=null?expandedRow.vpr.toFixed(1):'—']].map(([k,v])=>(
+                      {[['主機 IP',expandedRow.host],['連接埠',expandedRow.port+'/'+expandedRow.protocol],['Plugin ID',expandedRow.plugin_id],['CVE',expandedRow.cve||'—'],['CVSS',expandedRow.cvss??'—'],['EPSS',expandedRow.epss!=null?expandedRow.epss.toFixed(4):'—'],['VPR',expandedRow.vpr!=null?expandedRow.vpr.toFixed(1):'—']].map(([k,v])=>(
                         <div key={k} style={{display:'flex',gap:8}}>
                           <span style={{width:90,fontSize:11,fontWeight:600,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.04em',flexShrink:0}}>{k}</span>
                           <span style={{fontFamily:'var(--font-mono)',fontSize:12,color:'var(--text)'}}>{v}</span>
@@ -560,7 +560,7 @@ function VulnScanPage() {
                           <td style={{padding:'8px 12px',fontFamily:'var(--font-mono)',fontSize:12}}>{row.port}</td>
                           <td style={{padding:'8px 12px',fontFamily:'var(--font-mono)',fontSize:12}}>{row.plugin_id}</td>
                           <td style={{padding:'8px 12px',maxWidth:240,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={row.name}>{row.name}</td>
-                          <td style={{padding:'8px 12px',fontFamily:'var(--font-mono)',fontSize:12}}>{row.cvss||'—'}</td>
+                          <td style={{padding:'8px 12px',fontFamily:'var(--font-mono)',fontSize:12}}>{row.cvss??'—'}</td>
                           <td style={{padding:'8px 12px',fontFamily:'var(--font-mono)',fontSize:12,color:parseFloat(row.epss)>=0.1?'var(--critical)':'var(--text2)',fontWeight:parseFloat(row.epss)>=0.1?700:400}}>{row.epss!=null?row.epss.toFixed(3):'—'}</td>
                           <td style={{padding:'8px 12px',fontFamily:'var(--font-mono)',fontSize:12,color:parseFloat(row.vpr)>=7?'var(--critical)':'var(--text2)',fontWeight:parseFloat(row.vpr)>=7?700:400}}>{row.vpr!=null?row.vpr.toFixed(1):'—'}</td>
                           <td style={{padding:'8px 12px',fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text2)'}}>{row.cve||'—'}</td>
