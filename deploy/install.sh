@@ -35,11 +35,8 @@ sudo apt update && sudo apt install -y \
 
 echo ""
 echo "=== 2. 建立 PostgreSQL 資料庫 ==="
-sudo systemctl start postgresql
 sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='secvision'" | grep -q 1 || \
-    sudo -u postgres psql -c "CREATE USER secvision WITH PASSWORD '${DB_PASS}';"
-# 若使用者已存在則更新密碼
-sudo -u postgres psql -c "ALTER USER secvision WITH PASSWORD '${DB_PASS}';"
+    sudo -u postgres psql -c "CREATE USER secvision WITH PASSWORD 'changeme';"
 sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='secvision'" | grep -q 1 || \
     sudo -u postgres psql -c "CREATE DATABASE secvision OWNER secvision;"
 
