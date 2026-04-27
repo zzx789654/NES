@@ -155,7 +155,6 @@ sudo bash create-admin.sh admin 'Admin@123456' admin
 ```
 
 > 腳本會自動建立資料表（若不存在），並建立或更新該帳號密碼。
-> 若偵測到 `passlib`/`bcrypt` 相容性問題，腳本會自動安裝相容版本 `bcrypt==4.0.1` 後再重試。
 
 ## 本地執行
 

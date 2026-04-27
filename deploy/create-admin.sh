@@ -9,7 +9,6 @@ ROLE=${3:-admin}
 APP_DIR=/opt/secvision
 BACKEND_DIR="$APP_DIR/backend"
 VENV_PY="$APP_DIR/venv/bin/python"
-PIP_BIN="$APP_DIR/venv/bin/pip"
 
 if [[ ! -d "$BACKEND_DIR" ]]; then
   echo "❌ 找不到後端目錄: $BACKEND_DIR"
@@ -24,18 +23,6 @@ fi
 if [[ ! "$ROLE" =~ ^(admin|analyst|viewer)$ ]]; then
   echo "❌ ROLE 必須是 admin / analyst / viewer"
   exit 1
-fi
-
-# 修正 passlib+bcrypt 版本相容性（bcrypt 4.1+ 會造成 passlib 例外）
-if [[ -x "$PIP_BIN" ]]; then
-  if ! "$VENV_PY" - <<'PY' >/dev/null 2>&1
-import bcrypt
-assert hasattr(bcrypt, "__about__")
-PY
-  then
-    echo "⚠️  偵測到 bcrypt 與 passlib 不相容，正在安裝 bcrypt==4.0.1"
-    "$PIP_BIN" install -q "bcrypt==4.0.1"
-  fi
 fi
 
 cd "$BACKEND_DIR"
