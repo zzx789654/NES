@@ -34,13 +34,15 @@ def parse_nessus_csv(content: bytes, scan_name: str, scan_date: date | None = No
     df = pd.read_csv(io.BytesIO(content))
     df.columns = df.columns.str.strip()
 
+    col_map = {key: _find_col(df, key) for key in COL_ALIASES}
+
     vulns = []
     hosts = set()
 
     for _, row in df.iterrows():
-        def g(key):
-            col = _find_col(df, key)
-            val = row.get(col, None) if col else None
+        def g(key, _row=row):
+            col = col_map.get(key)
+            val = _row.get(col, None) if col else None
             return None if pd.isna(val) else str(val).strip()
 
         risk_raw = g("risk") or "Info"

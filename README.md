@@ -269,6 +269,30 @@ curl -I http://YOUR_SERVER_IP/index.html
 
 ---
 
+---
+
+## QA 測試報告（2026-04-27）
+
+以下為本次 QA 審查發現並已修復的問題：
+
+| # | 嚴重度 | 檔案 | 問題描述 | 修復方式 |
+|---|--------|------|----------|----------|
+| 1 | 🔴 高 | `backend/main.py` | CORS 設定 `allow_credentials=True` 與 `allow_origins=["*"]` 同時使用，違反 CORS 規範，導致瀏覽器拒絕帶憑證的跨域請求（新版 Starlette 會直接拋出 `ValueError` 使服務無法啟動） | 改為 `allow_credentials=False`；Bearer Token 透過 `Authorization` header 傳送，不需要 credential 模式 |
+| 2 | 🟡 中 | `api-client.js` | `uploadScan()` 與 `uploadAudit()` 收到 HTTP 401 時未清除 Token 也未派發 `secvision:unauthorized` 事件，導致 JWT 過期時上傳失敗但頁面不會自動跳回登入頁 | 補充 401 判斷，清除 `sessionStorage` Token 並派發未授權事件 |
+| 3 | 🟡 中 | `mock-api.js` | CVE-2022-42889（Text4Shell，CVSS 9.8）在三份掃描快照中均被標記為 `risk:'Medium'`；CVE-2017-7494（SambaCry，CVSS 9.8）在 Q3 掃描中標記為 `risk:'High'`。依 CVSS v3 標準，CVSS ≥ 9.0 應為 Critical，導致風險矩陣與優先修補清單顯示錯誤 | 將上述 4 筆弱點資料的 risk 更正為 `'Critical'` |
+| 4 | 🟡 中 | `pages/VulnScan.jsx` | 「優先修補清單」VPR 欄位的 render 函式未對 `null` 值做保護，當 `vpr` 為 `null` 時 `parseFloat(null).toFixed(1)` 回傳 `"NaN"` 並顯示在畫面上 | 加入 `v != null` 判斷，`null` 時顯示 `—` |
+| 5 | 🟢 低 | `backend/services/nessus_parser.py` | 內部函式 `g()` 在每次迴圈疊代中重新定義，且透過閉包隱含捕獲外部 `row` 變數；`_find_col()` 在每次欄位存取時都重新查找，但欄位映射在整個解析過程中不會改變 | 在迴圈前預先建立 `col_map` 字典；以預設引數 `_row=row` 明確綁定當次的 `row`，消除閉包隱患 |
+| 5b | 🟢 低 | `backend/services/audit_parser.py` | 同上，`g()` 函式在疊代中透過閉包捕獲 `row` | 同樣改為預設引數 `_row=row` |
+
+### 修復前後對照
+
+**Bug 3（風險矩陣資料錯誤）影響範圍：**
+- Dashboard 首頁 Critical 計數：Q3 掃描少計 2 筆（Text4Shell + SambaCry），後兩期少計 1 筆（Text4Shell）
+- VulnScan 風險矩陣圓餅圖：Medium 過多、Critical 不足
+- 優先修補清單：Text4Shell（EPSS 0.290, CVSS 9.8）本應進入「🔴 優先修補」象限但因標記為 Medium 而遺漏
+
+---
+
 ## 授權
 
 Internal use only.

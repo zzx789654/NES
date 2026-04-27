@@ -100,6 +100,11 @@ const APIClient = (() => {
         headers: authHeaders(),
         body: form,
       }).then(async res => {
+        if (res.status === 401) {
+          sessionStorage.removeItem(TOKEN_KEY);
+          window.dispatchEvent(new CustomEvent('secvision:unauthorized'));
+          throw new Error('未授權，請重新登入');
+        }
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.detail || 'HTTP ' + res.status);
@@ -135,6 +140,11 @@ const APIClient = (() => {
         headers: authHeaders(),
         body: form,
       }).then(async res => {
+        if (res.status === 401) {
+          sessionStorage.removeItem(TOKEN_KEY);
+          window.dispatchEvent(new CustomEvent('secvision:unauthorized'));
+          throw new Error('未授權，請重新登入');
+        }
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.detail || 'HTTP ' + res.status);

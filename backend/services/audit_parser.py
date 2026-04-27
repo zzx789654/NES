@@ -31,10 +31,10 @@ def parse_audit_csv(content: bytes, scan_name: str, scan_date: date | None = Non
 
     results = []
     for _, row in df.iterrows():
-        def g(c):
+        def g(c, _row=row):
             if c is None:
                 return None
-            val = row.get(c)
+            val = _row.get(c)
             return None if pd.isna(val) else str(val).strip()
 
         raw_status = g(status_col) or ""
