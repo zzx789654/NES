@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from config import settings
 from database import Base, engine
 from routers import auth, scans, nist, ipgroups, dashboard
 
@@ -13,10 +14,12 @@ app = FastAPI(
     description="Backend API for SecVision ISMS Security Portal",
 )
 
+origins = settings.cors_origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=origins,
+    # 萬用字元 * 不能搭配 allow_credentials=True（瀏覽器 CORS 規範限制）
+    allow_credentials="*" not in origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
