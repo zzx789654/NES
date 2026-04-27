@@ -86,6 +86,39 @@ sudo mkdir -p $APP_DIR/deploy
 sudo cp "$REPO_DIR/deploy/redeploy-backend.sh" "$REPO_DIR/deploy/create-admin.sh" $APP_DIR/deploy/
 sudo chown -R secvision:secvision $APP_DIR/deploy
 
+echo "=== 10. 驗證預設管理者登入 ==="
+for i in $(seq 1 20); do
+  if curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+verify_login() {
+  curl -sS -o /tmp/secvision_admin_token.json -w "%{http_code}" \
+    -X POST "http://127.0.0.1:8000/api/auth/token" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    --data-urlencode "username=${ADMIN_USER}" \
+    --data-urlencode "password=${ADMIN_PASS}"
+}
+
+HTTP_CODE=$(verify_login)
+if [[ "$HTTP_CODE" != "200" ]]; then
+  echo "⚠️  預設管理者驗證失敗（HTTP ${HTTP_CODE}），重新建立一次後重試..."
+  sudo bash "$REPO_DIR/deploy/create-admin.sh" "$ADMIN_USER" "$ADMIN_PASS" admin
+  sudo systemctl restart secvision
+  sleep 2
+  HTTP_CODE=$(verify_login)
+fi
+
+if [[ "$HTTP_CODE" == "200" ]]; then
+  echo "✅ 預設管理者登入驗證成功"
+else
+  echo "❌ 預設管理者仍無法登入（HTTP ${HTTP_CODE}）"
+  echo "   回應內容：$(cat /tmp/secvision_admin_token.json)"
+  echo "   請檢查：sudo journalctl -u secvision -n 120 --no-pager"
+fi
+
 echo ""
 echo "✅ 部署完成！"
 echo "   前端：http://${SERVER_IP}"
@@ -96,5 +129,4 @@ echo "   username: ${ADMIN_USER}"
 echo "   password: ${ADMIN_PASS}"
 echo "⚠️  安裝完成後請立即變更預設密碼"
 echo "⚠️  請記得修改 /opt/secvision/backend/.env 中的資料庫密碼與 SECRET_KEY"
-sudo systemctl restart secvision
 
