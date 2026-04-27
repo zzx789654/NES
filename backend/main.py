@@ -28,6 +28,16 @@ app.include_router(ipgroups.router)
 app.include_router(dashboard.router)
 
 
+@app.get("/")
+def root():
+    return {
+        "service": "SecVision ISMS API",
+        "status": "ok",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
