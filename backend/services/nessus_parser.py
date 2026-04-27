@@ -16,6 +16,7 @@ COL_ALIASES = {
     "protocol": ["Protocol", "protocol"],
     "name": ["Name", "Plugin Name", "name"],
     "cvss": ["CVSS v3.0 Base Score", "CVSS Base Score", "cvss_base_score", "cvss"],
+    "vpr": ["VPR Score", "VPR", "vpr_score", "vpr"],
     "synopsis": ["Synopsis", "synopsis"],
     "description": ["Description", "description"],
     "solution": ["Solution", "solution"],
@@ -60,6 +61,14 @@ def parse_nessus_csv(content: bytes, scan_name: str, scan_date: date | None = No
             except ValueError:
                 pass
 
+        vpr_raw = g("vpr")
+        vpr = None
+        if vpr_raw:
+            try:
+                vpr = round(float(vpr_raw), 1)
+            except ValueError:
+                pass
+
         vulns.append({
             "plugin_id": g("plugin_id"),
             "cve": g("cve"),
@@ -69,6 +78,7 @@ def parse_nessus_csv(content: bytes, scan_name: str, scan_date: date | None = No
             "protocol": g("protocol"),
             "name": g("name"),
             "cvss": cvss,
+            "vpr": vpr,
             "synopsis": g("synopsis"),
             "description": g("description"),
             "solution": g("solution"),

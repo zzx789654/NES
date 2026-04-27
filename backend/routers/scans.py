@@ -108,6 +108,7 @@ async def upload_scan(
             name=v.get("name"),
             cvss=v.get("cvss"),
             epss=epss_map.get(cve),
+            vpr=v.get("vpr"),
             synopsis=v.get("synopsis"),
             description=v.get("description"),
             solution=v.get("solution"),
