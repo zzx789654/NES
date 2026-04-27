@@ -497,7 +497,7 @@ function VulnScanPage() {
                 columns={[
                   { key:'risk',      label:'等級', sortable:true, render:v=><SeverityBadge level={v} /> },
                   { key:'epss',      label:'EPSS',  sortable:true, mono:true, render:v=><span style={{color:'var(--critical)',fontWeight:700}}>{parseFloat(v).toFixed(3)}</span> },
-                  { key:'vpr',       label:'VPR',   sortable:true, mono:true, render:v=><span style={{color:parseFloat(v)>=7?'var(--critical)':'var(--warning)',fontWeight:700}}>{parseFloat(v).toFixed(1)}</span> },
+                  { key:'vpr',       label:'VPR',   sortable:true, mono:true, render:v=>v!=null?<span style={{color:parseFloat(v)>=7?'var(--critical)':'var(--warning)',fontWeight:700}}>{parseFloat(v).toFixed(1)}</span>:<span style={{color:'var(--text3)'}}>—</span> },
                   { key:'cvss',      label:'CVSS',  sortable:true, mono:true },
                   { key:'host',      label:'主機',  sortable:true, mono:true },
                   { key:'name',      label:'弱點名稱', render:v=><span title={v}>{v?.length>55?v.slice(0,53)+'…':v}</span> },

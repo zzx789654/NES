@@ -204,7 +204,7 @@ bash scripts/setup-dev.sh
 bash scripts/setup-dev.sh --with-postgres
 ```
 
-腳本完成後依照畫面提示啟動前後端服務。
+
 
 ### 方法二：Demo 模式（完全不需後端）
 
@@ -245,82 +245,6 @@ pip install -r requirements.txt
 ### 步驟三：設定環境變數
 
 ```bash
-cp .env.example .env
-```
-
-編輯 `.env`：
-
-```dotenv
-# SQLite（開發用，無需安裝 PostgreSQL）
-DATABASE_URL=sqlite:///./secvision.db
-
-# PostgreSQL（正式或測試環境）
-# DATABASE_URL=postgresql://secvision:yourpassword@localhost:5432/secvision
-
-SECRET_KEY=請替換為隨機字串（至少 32 字元）
-ACCESS_TOKEN_EXPIRE_MINUTES=480
-```
-
-產生隨機 SECRET_KEY：
-
-```bash
-python3 -c "import secrets; print(secrets.token_hex(32))"
-```
-
-### 步驟四：初始化資料庫
-
-```bash
-# 確保在 backend/ 目錄下，且虛擬環境已啟動
-alembic upgrade head
-```
-
-### 步驟五：建立初始管理員帳號
-
-```bash
-python3 - <<'EOF'
-from database import SessionLocal, Base, engine
-from models.user import User
-from passlib.context import CryptContext
-Base.metadata.create_all(bind=engine)
-db = SessionLocal()
-if not db.query(User).filter(User.username == 'admin').first():
-    hashed = CryptContext(schemes=['bcrypt'], deprecated='auto').hash('admin')
-    db.add(User(username='admin', hashed_pw=hashed, role='admin'))
-    db.commit()
-    print('管理員帳號已建立：admin / admin')
-db.close()
-EOF
-```
-
-### 步驟六：啟動後端
-
-```bash
-uvicorn main:app --reload --host 127.0.0.1 --port 8000
-```
-
-### 步驟七：啟動前端
-
-另開終端機，回到專案根目錄：
-
-```bash
-cd ..   # 回到 NES/
-python3 -m http.server 8080
-```
-
-### 步驟八：確認服務
-
-| 服務 | URL |
-|------|-----|
-| 前端 | http://localhost:8080 |
-| API 文件（Swagger） | http://localhost:8000/api/docs |
-| API 文件（ReDoc） | http://localhost:8000/api/redoc |
-| 健康檢查 | http://localhost:8000/health |
-
-登入帳號：`admin` / `admin`（開發用，請立即修改）
-
----
-
-## 生產環境部署
 
 ### 自動化部署（Ubuntu 24.04 / 22.04）
 
@@ -446,16 +370,6 @@ sudo -u postgres psql secvision < secvision_YYYYMMDD.sql
 
 ---
 
-## 使用者角色與權限
-
-| 操作 | viewer | analyst | admin |
-|------|--------|---------|-------|
-| 查看儀表板 / 掃描 / 稽核 | ✅ | ✅ | ✅ |
-| 上傳 / 刪除掃描與稽核 | ❌ | ✅ | ✅ |
-| 管理 IP 群組 | ❌ | ✅ | ✅ |
-| 新增使用者 | ❌ | ❌ | ✅ |
-
-新增使用者範例（需 admin JWT）：
 
 ```bash
 # 先取得 token

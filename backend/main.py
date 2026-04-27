@@ -23,8 +23,7 @@ _credentials = "*" not in _origins
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_origins,
-    allow_credentials=_credentials,
+
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -34,6 +33,16 @@ app.include_router(scans.router)
 app.include_router(nist.router)
 app.include_router(ipgroups.router)
 app.include_router(dashboard.router)
+
+
+@app.get("/")
+def root():
+    return {
+        "service": "SecVision ISMS API",
+        "status": "ok",
+        "docs": "/docs",
+        "health": "/health",
+    }
 
 
 @app.get("/health")
