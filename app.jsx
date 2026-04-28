@@ -15,7 +15,7 @@ const NAV = [
   { id:'nist',      label:'NIST', icon:'⬡', sub:'安全框架' },
 ];
 
-function Sidebar({ page, setPage, stats, onLogout }) {
+function Sidebar({ page, setPage, stats, onLogout, onChangePassword }) {
   const counts = {
     dashboard: null,
     vulnscan:  stats ? stats.severityCounts.Critical + stats.severityCounts.High : null,
@@ -76,14 +76,24 @@ function Sidebar({ page, setPage, stats, onLogout }) {
         </div>
         <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <div style={{fontSize:11,color:'var(--text3)',fontFamily:'var(--font-mono)'}}>v2.1.0 · {new Date().toLocaleDateString('zh-TW')}</div>
-          {onLogout && (
-            <button onClick={onLogout}
-              style={{fontSize:11,color:'var(--text3)',padding:'3px 8px',borderRadius:'var(--rsm)',border:'1px solid var(--border)',background:'transparent',cursor:'pointer',transition:'all 0.15s'}}
-              onMouseEnter={e => { e.currentTarget.style.color='var(--critical)'; e.currentTarget.style.borderColor='var(--critical)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color='var(--text3)'; e.currentTarget.style.borderColor='var(--border)'; }}>
-              登出
-            </button>
-          )}
+          <div style={{display:'flex',gap:6}}>
+            {onChangePassword && (
+              <button onClick={onChangePassword}
+                style={{fontSize:11,color:'var(--text3)',padding:'3px 8px',borderRadius:'var(--rsm)',border:'1px solid var(--border)',background:'transparent',cursor:'pointer',transition:'all 0.15s'}}
+                onMouseEnter={e => { e.currentTarget.style.color='var(--accent)'; e.currentTarget.style.borderColor='var(--accent)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color='var(--text3)'; e.currentTarget.style.borderColor='var(--border)'; }}>
+                變更密碼
+              </button>
+            )}
+            {onLogout && (
+              <button onClick={onLogout}
+                style={{fontSize:11,color:'var(--text3)',padding:'3px 8px',borderRadius:'var(--rsm)',border:'1px solid var(--border)',background:'transparent',cursor:'pointer',transition:'all 0.15s'}}
+                onMouseEnter={e => { e.currentTarget.style.color='var(--critical)'; e.currentTarget.style.borderColor='var(--critical)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color='var(--text3)'; e.currentTarget.style.borderColor='var(--border)'; }}>
+                登出
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </aside>
@@ -122,6 +132,23 @@ function App() {
     return <window.LoginPage onLogin={() => setIsLoggedIn(true)} />;
   }
 
+  async function handleChangePassword() {
+    if (APIClient.isDemoMode && APIClient.isDemoMode()) {
+      alert('Demo 模式不支援變更密碼');
+      return;
+    }
+    const currentPassword = window.prompt('請輸入目前密碼');
+    if (!currentPassword) return;
+    const newPassword = window.prompt('請輸入新密碼（至少 8 碼）');
+    if (!newPassword) return;
+    try {
+      await APIClient.changePassword(currentPassword, newPassword);
+      alert('✅ 密碼已更新，請使用新密碼登入');
+    } catch (err) {
+      alert('❌ 變更密碼失敗：' + (err.message || '未知錯誤'));
+    }
+  }
+
   const PAGE_MAP = {
     dashboard: window.DashboardPage,
     vulnscan:  window.VulnScanPage,
@@ -132,7 +159,13 @@ function App() {
 
   return (
     <div style={{display:'flex',height:'100vh',overflow:'hidden'}}>
-      <Sidebar page={page} setPage={setPage} stats={stats} onLogout={() => { APIClient.logout(); setIsLoggedIn(false); }} />
+      <Sidebar
+        page={page}
+        setPage={setPage}
+        stats={stats}
+        onChangePassword={handleChangePassword}
+        onLogout={() => { APIClient.logout(); setIsLoggedIn(false); }}
+      />
       <main style={{flex:1,overflow:'auto',background:'var(--bg)',padding:'24px 32px'}}>
         <PageComponent onNavigate={setPage} onStatsChange={() => setStats(MockAPI.getDashboardStats())} />
       </main>

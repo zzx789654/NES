@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from config import settings
 from database import get_db
 from models.user import User
-from schemas.auth import Token, TokenData, UserCreate, UserOut
+from schemas.auth import Token, TokenData, UserCreate, UserOut, PasswordChange
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
@@ -91,3 +91,19 @@ def register(
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.post("/change-password", status_code=204)
+def change_password(
+    body: PasswordChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not verify_password(body.current_password, current_user.hashed_pw):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if body.current_password == body.new_password:
+        raise HTTPException(status_code=400, detail="New password must be different from current password")
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    current_user.hashed_pw = hash_password(body.new_password)
+    db.commit()

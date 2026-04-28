@@ -89,6 +89,13 @@ const APIClient = (() => {
       sessionStorage.removeItem(TOKEN_KEY);
     },
 
+    changePassword(currentPassword, newPassword) {
+      return req('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      });
+    },
+
     // ─── Dashboard ───────────────────────────────────────────────────────────
 
     getDashboardStats() {

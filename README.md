@@ -88,6 +88,7 @@ API 文件：`http://127.0.0.1:8000/docs`
 - `POST /api/auth/token`：登入取得 JWT
 - `GET /api/auth/me`：取得目前使用者
 - `POST /api/auth/register`：管理員建立帳號
+- `POST /api/auth/change-password`：登入後變更自己的密碼
 
 ### Scans
 
@@ -96,6 +97,8 @@ API 文件：`http://127.0.0.1:8000/docs`
 - `POST /api/scans/upload`
 - `DELETE /api/scans/{id}`
 - `GET /api/scans/diff?base=&comp=`
+
+> CVE JSON 上傳範例：`samples/cve-upload-sample.json`
 
 ### NIST
 

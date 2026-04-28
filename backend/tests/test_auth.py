@@ -89,3 +89,36 @@ def test_register_invalid_role(client, admin_token):
         headers=auth(admin_token),
     )
     assert resp.status_code == 400
+
+
+def test_change_password_success(client, db):
+    _seed_user(db, "changeme", "oldpass123", "viewer")
+    login = client.post("/api/auth/token", data={"username": "changeme", "password": "oldpass123"})
+    token = login.json()["access_token"]
+    resp = client.post(
+        "/api/auth/change-password",
+        json={"current_password": "oldpass123", "new_password": "newpass123"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 204
+    relogin = client.post("/api/auth/token", data={"username": "changeme", "password": "newpass123"})
+    assert relogin.status_code == 200
+
+
+def test_change_password_wrong_current_password(client, db):
+    _seed_user(db, "wrongcurrent", "oldpass123", "viewer")
+    token = client.post("/api/auth/token", data={"username": "wrongcurrent", "password": "oldpass123"}).json()["access_token"]
+    resp = client.post(
+        "/api/auth/change-password",
+        json={"current_password": "bad-old", "new_password": "newpass123"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 400
+
+
+def test_change_password_requires_auth(client):
+    resp = client.post(
+        "/api/auth/change-password",
+        json={"current_password": "oldpass123", "new_password": "newpass123"},
+    )
+    assert resp.status_code == 401

@@ -23,3 +23,8 @@ class UserOut(BaseModel):
     role: str
 
     model_config = {"from_attributes": True}
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
