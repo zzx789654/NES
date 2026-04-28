@@ -1,103 +1,70 @@
 # SecVision — ISMS Security Portal
 
-資訊安全管理系統（ISMS）整合平台，提供弱點掃描分析、NIST 合規稽核與 Dashboard 概覽。
+資訊安全管理系統（ISMS）整合平台，提供弱點掃描分析、NIST 合規稽核與儀表板概覽。支援無後端 Demo 模式與完整 FastAPI + PostgreSQL 生產模式雙執行環境。
+
+---
 
 ## 功能總覽
 
 | 頁面 | 功能 |
 |------|------|
-| **Login** | JWT 登入驗證 / Demo 模式（無需後端） |
+| **Login** | JWT 帳密登入 / Demo 模式（無需後端） |
 | **Dashboard** | 弱點嚴重等級圓餅圖、風險趨勢折線圖、NIST CSF 合規率、SP 800-53 摘要、活動時間線 |
-| **Vulnerability Scan** | Nessus CSV 上傳、EPSS/VPR 四象限風險矩陣、Diff 差異比對、IP 群組多選篩選、IP 歷程追蹤、NVD CVE JSON 上傳、**弱點清單 CSV 匯出**、**Diff 結果 CSV 匯出** |
+| **Vulnerability Scan** | Nessus CSV 上傳、NVD CVE JSON 上傳、EPSS/VPR 四象限風險矩陣、Diff 差異比對、IP 群組篩選、IP 歷程追蹤、弱點清單 CSV 匯出、Diff 結果 CSV 匯出 |
 | **NIST** | Nessus Audit CSV 上傳、PASSED/FAILED 結果檢視、版本 Diff 比對、通過率趨勢圖 |
 
 ---
 
-## 系統架構圖
+## 系統架構
 
-### 現行架構（前端靜態版 + API Client 就緒）
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                      瀏覽器                              │
-│                                                          │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │                  index.html                       │   │
-│  │  全域 CSS 變數 / Dark-Light 主題 / CDN 載入        │   │
-│  └──────┬───────────────────────────────────────────┘   │
-│         │ 載入順序                                        │
-│         ▼                                                │
-│  ┌─────────────┐  ┌──────────────┐                       │
-│  │ mock-api.js │  │api-client.js │  ← JWT fetch wrapper  │
-│  │ MockAPI     │  │ APIClient    │    /api/* 真實呼叫     │
-│  │ (Demo 資料)  │  │ singleton   │                       │
-│  └─────────────┘  └──────────────┘                       │
-│         │                                                │
-│         ▼                                                │
-│  ┌──────────────┐  ┌───────────────────────────────┐    │
-│  │components.jsx│  │         app.jsx                │    │
-│  │ 共用 UI 元件  │  │ Auth 狀態 / Sidebar / 路由     │    │
-│  │ DataTable    │  └───────────────┬───────────────┘    │
-│  │ FileUpload…  │         路由      │                    │
-│  └──────────────┘   ┌─────────────┼──────────┐          │
-│                     ▼             ▼          ▼           │
-│              ┌──────────┐ ┌──────────┐ ┌──────────┐     │
-│              │Login.jsx │ │Dashboard │ │VulnScan  │ …   │
-│              │(JWT 登入) │ │  .jsx    │ │  .jsx    │     │
-│              └──────────┘ └──────────┘ └──────────┘     │
-│                                                          │
-│  ┌──────────────────┐                                   │
-│  │   localStorage   │                                   │
-│  │ IP Groups / ISO  │                                   │
-│  └──────────────────┘                                   │
-└─────────────────────────────────────────────────────────┘
-         ▲
-         │ CDN
-┌────────┴─────────────────────────────────────────┐
-│  React 18 · Babel Standalone · Chart.js 4.4.0    │
-│  IBM Plex Sans/Mono (Google Fonts)                │
-└──────────────────────────────────────────────────┘
-```
-
-### 目標架構（後端資料庫版）
+### 前端靜態模式（Demo / 無後端）
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         使用者瀏覽器                              │
-│                                                                  │
-│   ┌─────────────────────────────────────────────────────────┐   │
-│   │              前端（Static HTML / React）                  │   │
-│   │   index.html · api-client.js · components.jsx           │   │
-│   │   pages/Login.jsx · pages/Dashboard.jsx · …             │   │
-│   └──────────────────────┬──────────────────────────────────┘   │
-└──────────────────────────│──────────────────────────────────────┘
-                           │ HTTPS / REST API（Bearer JWT）
-                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Ubuntu 24.04 / 22.04 Server                   │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                   Nginx（反向代理）                        │   │
-│  │   / → 靜態前端   /api/* → FastAPI backend                 │   │
-│  └───────────────────────┬──────────────────────────────────┘   │
-│                          │                                       │
-│  ┌───────────────────────▼──────────────────────────────────┐   │
-│  │                 FastAPI (Python 3.11+)                     │   │
-│  │                                                           │   │
-│  │  /api/auth/token   — JWT 登入                             │   │
-│  │  /api/scans        — 掃描記錄 CRUD + 上傳 + Diff          │   │
-│  │  /api/nist         — Audit 記錄 CRUD + 上傳 + Diff        │   │
-│  │  /api/dashboard    — 統計摘要                             │   │
-│  │  /api/ipgroups     — IP 群組 CRUD                         │   │
-│  └───────────────────────┬──────────────────────────────────┘   │
-│                          │ SQLAlchemy 2.0 ORM                    │
-│  ┌───────────────────────▼──────────────────────────────────┐   │
-│  │              PostgreSQL 16 / SQLite（開發）               │   │
-│  │                                                           │   │
-│  │  scans · vulnerabilities · audit_scans · audit_results   │   │
-│  │  ip_groups · users                                        │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                        瀏覽器                             │
+│                                                           │
+│  index.html  ←  全域 CSS 變數 / Dark-Light 主題           │
+│      │                                                    │
+│      ├── mock-api.js     MockAPI (Demo 資料 + EPSS/VPR)   │
+│      ├── api-client.js   JWT Bearer fetch wrapper         │
+│      ├── components.jsx  共用 UI 元件（DataTable 等）      │
+│      └── app.jsx         Auth 狀態 / Sidebar / 路由        │
+│              ├── pages/Login.jsx                          │
+│              ├── pages/Dashboard.jsx                      │
+│              ├── pages/VulnScan.jsx                       │
+│              └── pages/NIST.jsx                           │
+│                                                           │
+│  持久化：localStorage（IP Groups）                        │
+└──────────────────────────────────────────────────────────┘
+         ▲  CDN
+┌────────┴──────────────────────────────────────────────┐
+│  React 18.3.1 · Babel Standalone 7.29.0               │
+│  Chart.js 4.4.0 · IBM Plex Sans/Mono (Google Fonts)   │
+└───────────────────────────────────────────────────────┘
+```
+
+### 生產模式（FastAPI + PostgreSQL）
+
+```
+瀏覽器
+  │  HTTPS / REST（Bearer JWT）
+  ▼
+Nginx（反向代理）
+  ├── /          →  靜態前端 /var/www/secvision
+  └── /api/*     →  FastAPI :8000
+                       │
+                       ├── /api/auth/*      JWT 登入 / 使用者管理
+                       ├── /api/scans/*     掃描 CRUD + 上傳 + Diff
+                       ├── /api/nist/*      Audit CRUD + 上傳 + Diff
+                       ├── /api/ipgroups/*  IP 群組 CRUD
+                       └── /api/dashboard   統計摘要
+                             │
+                       SQLAlchemy 2.0 ORM
+                             │
+                       PostgreSQL 16（生產）/ SQLite（開發）
+                         scans · vulnerabilities
+                         audit_scans · audit_results
+                         ip_groups · users
 ```
 
 ---
@@ -106,135 +73,234 @@
 
 ```
 NES/
-├── index.html              # 入口：全域樣式、CDN 載入、script 順序
-├── mock-api.js             # 模擬 REST API（含 EPSS/VPR 富化）
-├── api-client.js           # ★ 真實 API 客戶端（JWT Bearer fetch wrapper）
-├── components.jsx          # 共用 UI 元件庫
-├── app.jsx                 # App shell：Auth 狀態、Sidebar（含登出）、路由
+├── .gitignore
+├── index.html                        # 入口：全域樣式、CDN 載入、script 順序
+├── mock-api.js                       # Demo 用 MockAPI（含 EPSS/VPR 資料）
+├── api-client.js                     # 真實 API 客戶端（JWT Bearer fetch wrapper）
+├── components.jsx                    # 共用 UI 元件庫
+├── app.jsx                           # App shell：Auth 狀態、Sidebar、路由
 ├── pages/
-│   ├── Login.jsx           # ★ 登入頁（JWT / Demo 模式）
-│   ├── Dashboard.jsx       # Dashboard 頁
-│   ├── VulnScan.jsx        # 弱點掃描頁（含 CSV 匯出）
-│   └── NIST.jsx            # NIST Audit 頁
-├── backend/                # FastAPI 後端（見 backend/README 或 待修改.md）
+│   ├── Login.jsx                     # 登入頁（JWT / Demo 模式）
+│   ├── Dashboard.jsx                 # Dashboard 頁
+│   ├── VulnScan.jsx                  # 弱點掃描頁（含 CSV 匯出）
+│   └── NIST.jsx                      # NIST Audit 頁
+├── backend/
+│   ├── main.py                       # FastAPI app + CORS middleware
+│   ├── config.py                     # pydantic-settings（DATABASE_URL, SECRET_KEY）
+│   ├── database.py                   # SQLAlchemy engine / SessionLocal
+│   ├── requirements.txt              # Python 依賴（版本釘選）
+│   ├── alembic.ini                   # Alembic 設定
+│   ├── alembic/versions/
+│   │   └── 0001_initial_schema.py    # 初始資料庫 Schema
+│   ├── models/
+│   │   ├── scan.py                   # Scan / Vulnerability ORM
+│   │   ├── audit.py                  # AuditScan / AuditResult ORM
+│   │   ├── ipgroup.py                # IPGroup ORM
+│   │   └── user.py                   # User ORM
+│   ├── routers/
+│   │   ├── auth.py                   # /api/auth（login / register / me）
+│   │   ├── scans.py                  # /api/scans
+│   │   ├── nist.py                   # /api/nist
+│   │   ├── ipgroups.py               # /api/ipgroups
+│   │   └── dashboard.py              # /api/dashboard
+│   ├── schemas/                      # Pydantic 請求 / 回應 schema
+│   └── services/
+│       ├── nessus_parser.py          # Nessus CSV 解析
+│       ├── audit_parser.py           # Audit CSV 解析
+│       ├── cve_parser.py             # NVD JSON 2.0 / 1.1 解析
+│       ├── diff_service.py           # 弱點 / Audit diff 計算
+│       └── epss_service.py           # FIRST.org EPSS API 富化
 ├── deploy/
-│   ├── nginx.conf          # ★ Nginx 反向代理設定
-│   ├── secvision.service   # ★ systemd 服務設定
-│   └── install.sh          # ★ Ubuntu 快速部署腳本
-├── README.md               # 本文件
-└── 待修改.md               # 待辦改善項目（進度追蹤）
+│   ├── nginx.conf                    # Nginx 反向代理 + HTTPS + 安全標頭
+│   ├── secvision.service             # systemd 服務定義
+│   └── install.sh                    # Ubuntu 快速部署腳本
+└── README.md
 ```
-
-> ★ 為本次新增檔案
 
 ---
 
 ## 認證說明
 
-應用程式啟動時會檢查 `sessionStorage` 中的 JWT token：
+應用程式啟動時檢查 `sessionStorage` 中是否存有 JWT token：
 
-- **有 token** → 直接進入主畫面
-- **無 token** → 顯示登入頁
+| 狀態 | 行為 |
+|------|------|
+| 有效 token | 直接進入主畫面 |
+| 無 token | 跳轉至登入頁 |
+| token 為 `__demo__` | Demo 模式，所有 API 呼叫由 MockAPI 攔截 |
 
 登入頁提供兩種模式：
-| 模式 | 說明 |
+
+| 模式 | 流程 |
 |------|------|
-| 帳號密碼登入 | POST `/api/auth/token`，取得 JWT 存入 `sessionStorage` |
-| Demo 模式 | 設定 `__demo__` 旗標，跳過後端，使用 MockAPI 本地資料 |
+| 帳號密碼登入 | `POST /api/auth/token` → 取得 JWT → 存入 `sessionStorage` |
+| Demo 模式 | 設定 `__demo__` 旗標，跳過後端，使用本地 MockAPI 資料 |
+
+Token 過期（HTTP 401）時，前端自動清除 token 並派發 `secvision:unauthorized` 事件，觸發跳回登入頁。
+
+### 使用者角色
+
+| 角色 | 權限 |
+|------|------|
+| `admin` | 全部操作，含使用者管理 |
+| `analyst` | 上傳掃描、讀取、刪除資料 |
+| `viewer` | 唯讀 |
 
 ---
 
-## 本地執行
+## 本地開發（無後端 / Demo 模式）
 
-不需要 build 工具，直接以任意 HTTP 伺服器提供靜態檔案即可：
+不需要任何 build 工具，直接以 HTTP 伺服器提供靜態檔案：
 
 ```bash
 # Python 3
 python3 -m http.server 8080
 
-# Node.js（npx）
+# Node.js
 npx serve .
 ```
 
-開啟瀏覽器至 `http://localhost:8080`，點選「Demo 模式」即可無需後端體驗完整功能。
+開啟瀏覽器至 `http://localhost:8080`，點選「Demo 模式」即可體驗完整功能。
 
 ---
 
-## 生產環境部署（Ubuntu）
+## 後端開發（SQLite 本地執行）
 
 ```bash
-# 快速部署（自動安裝依賴、建立資料庫、設定 Nginx + systemd）
+cd backend
+
+# 建立虛擬環境
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 初始化資料庫
+alembic upgrade head
+
+# 建立第一個管理員帳號
+python3 - <<'EOF'
+from database import SessionLocal
+from models.user import User
+from passlib.context import CryptContext
+pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+db = SessionLocal()
+db.add(User(username="admin", hashed_pw=pwd.hash("your-password"), role="admin"))
+db.commit(); db.close()
+print("Admin user created.")
+EOF
+
+# 啟動後端（預設使用 SQLite ./secvision.db）
+uvicorn main:app --reload --port 8000
+```
+
+API 文件可至 `http://localhost:8000/docs` 查閱（Swagger UI）。
+
+---
+
+## 生產環境部署（Ubuntu 24.04 / 22.04）
+
+```bash
+# 一鍵安裝（需 sudo；自動安裝依賴、建立 PostgreSQL 資料庫、設定 Nginx + systemd）
 cd deploy/
 sudo bash install.sh
 ```
 
-詳細設定請參考 `deploy/nginx.conf` 與 `deploy/secvision.service`。
+部署完成後：
+
+1. 編輯 `/opt/secvision/backend/.env`，設定正式的 `DATABASE_URL` 與 `SECRET_KEY`
+2. 編輯 `deploy/nginx.conf`，將 `your-domain.com` 替換為實際網域
+3. 申請 Let's Encrypt 憑證後，確認 `ssl_certificate` / `ssl_certificate_key` 路徑正確
+4. 建立第一個管理員帳號（參考上方後端開發步驟）
+
+### 環境變數（`.env`）
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| `DATABASE_URL` | `sqlite:///./secvision.db` | 資料庫連線字串 |
+| `SECRET_KEY` | `dev-secret-key-change-in-production` | JWT 簽名金鑰，**生產環境必須更換** |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `480` | Token 有效期（分鐘） |
+
+---
+
+## API 端點速覽
+
+| 方法 | 路徑 | 說明 |
+|------|------|------|
+| `POST` | `/api/auth/token` | 登入，取得 JWT |
+| `GET` | `/api/auth/me` | 取得目前使用者資訊 |
+| `POST` | `/api/auth/register` | 新增使用者（admin only） |
+| `GET` | `/api/scans` | 掃描清單 |
+| `POST` | `/api/scans/upload` | 上傳 Nessus CSV / NVD JSON |
+| `GET` | `/api/scans/{id}` | 掃描詳情（含弱點列表） |
+| `DELETE` | `/api/scans/{id}` | 刪除掃描 |
+| `GET` | `/api/scans/diff?base=&comp=` | 兩次掃描 Diff |
+| `GET` | `/api/nist/scans` | Audit 掃描清單 |
+| `POST` | `/api/nist/upload` | 上傳 Audit CSV |
+| `GET` | `/api/nist/diff?base=&comp=` | Audit Diff |
+| `GET` | `/api/nist/trend` | 通過率趨勢 |
+| `GET` | `/api/ipgroups` | IP 群組清單 |
+| `POST` | `/api/ipgroups` | 新增 IP 群組 |
+| `PUT` | `/api/ipgroups/{id}` | 更新 IP 群組 |
+| `DELETE` | `/api/ipgroups/{id}` | 刪除 IP 群組 |
+| `GET` | `/api/dashboard` | 統計摘要 |
+| `GET` | `/health` | 健康檢查 |
 
 ---
 
 ## 技術棧
 
-| 類別 | 技術 |
-|------|------|
-| 框架 | React 18（CDN UMD） |
-| JSX 編譯 | Babel Standalone |
+| 類別 | 技術 / 版本 |
+|------|------------|
+| 前端框架 | React 18.3.1（CDN UMD） |
+| JSX 編譯 | Babel Standalone 7.29.0 |
 | 圖表 | Chart.js 4.4.0 |
-| 字體 | IBM Plex Sans / Mono |
-| 認證 | JWT（python-jose）via `/api/auth/token` |
-| API 客戶端 | `api-client.js`（原生 fetch + Bearer token） |
-| 持久化（Demo） | localStorage / MockAPI |
-| 持久化（生產） | FastAPI + PostgreSQL 16 |
-| 部署 | Nginx + systemd on Ubuntu 24.04 / 22.04 |
+| 字體 | IBM Plex Sans / Mono（Google Fonts） |
+| 後端框架 | FastAPI 0.115.0 |
+| ASGI 伺服器 | Uvicorn 0.30.6 |
+| ORM | SQLAlchemy 2.0.35 |
+| 資料庫遷移 | Alembic 1.13.3 |
+| 資料庫（生產） | PostgreSQL 16 |
+| 資料庫（開發） | SQLite（無需額外安裝） |
+| 認證 | JWT via python-jose 3.3.0 |
+| 密碼雜湊 | passlib 1.7.4 + bcrypt 4.0.1 |
+| 資料驗證 | Pydantic 2.9.2 + pydantic-settings 2.5.2 |
+| CSV 解析 | pandas 2.2.3 |
+| HTTP 客戶端（EPSS） | httpx 0.27.2 |
+| 反向代理 | Nginx |
+| 服務管理 | systemd |
 
 ---
 
----
+## QA 修復記錄
 
-## QA 測試報告（2026-04-27）
+### 第一輪（2026-04-27）
 
-以下為本次 QA 審查發現並已修復的問題：
+| # | 嚴重度 | 檔案 | 問題 | 修復 |
+|---|--------|------|------|------|
+| 1 | 🔴 高 | `backend/main.py` | `allow_credentials=True` + `allow_origins=["*"]` 同時使用違反 CORS 規範，新版 Starlette 啟動時直接拋出 `ValueError` | 改為 `allow_credentials=False`；Bearer Token 以 `Authorization` header 傳送無需 credential 模式 |
+| 2 | 🟡 中 | `api-client.js` | `uploadScan()` / `uploadAudit()` 收到 HTTP 401 時未清除 Token、未派發 `secvision:unauthorized` 事件，JWT 過期後上傳失敗頁面不自動跳回登入頁 | 補充 401 分支：清除 `sessionStorage` token 並派發未授權事件 |
+| 3 | 🟡 中 | `mock-api.js` | CVE-2022-42889（CVSS 9.8）標記為 `Medium`；CVE-2017-7494（CVSS 9.8）標記為 `High`。CVSS ≥ 9.0 應為 Critical，共 4 筆錯誤，導致風險矩陣與優先修補清單失準 | 將 4 筆資料的 `risk` 更正為 `'Critical'` |
+| 4 | 🟡 中 | `pages/VulnScan.jsx` | 優先修補清單 VPR 欄位未防護 `null`，`parseFloat(null).toFixed(1)` 輸出 `"NaN"` 顯示於畫面 | 加入 `v != null` 判斷，`null` 時顯示 `—` |
+| 5 | 🟢 低 | `backend/services/nessus_parser.py` | `g()` 每次疊代重新定義並透過閉包隱含捕獲 `row`；`_find_col()` 每次欄位存取都重新查找 | 迴圈前預建 `col_map`；`g()` 改用預設引數 `_row=row` 消除閉包隱患 |
+| 5b | 🟢 低 | `backend/services/audit_parser.py` | 同上，`g()` 閉包捕獲 `row` | 同樣改為 `_row=row` 預設引數 |
 
-| # | 嚴重度 | 檔案 | 問題描述 | 修復方式 |
-|---|--------|------|----------|----------|
-| 1 | 🔴 高 | `backend/main.py` | CORS 設定 `allow_credentials=True` 與 `allow_origins=["*"]` 同時使用，違反 CORS 規範，導致瀏覽器拒絕帶憑證的跨域請求（新版 Starlette 會直接拋出 `ValueError` 使服務無法啟動） | 改為 `allow_credentials=False`；Bearer Token 透過 `Authorization` header 傳送，不需要 credential 模式 |
-| 2 | 🟡 中 | `api-client.js` | `uploadScan()` 與 `uploadAudit()` 收到 HTTP 401 時未清除 Token 也未派發 `secvision:unauthorized` 事件，導致 JWT 過期時上傳失敗但頁面不會自動跳回登入頁 | 補充 401 判斷，清除 `sessionStorage` Token 並派發未授權事件 |
-| 3 | 🟡 中 | `mock-api.js` | CVE-2022-42889（Text4Shell，CVSS 9.8）在三份掃描快照中均被標記為 `risk:'Medium'`；CVE-2017-7494（SambaCry，CVSS 9.8）在 Q3 掃描中標記為 `risk:'High'`。依 CVSS v3 標準，CVSS ≥ 9.0 應為 Critical，導致風險矩陣與優先修補清單顯示錯誤 | 將上述 4 筆弱點資料的 risk 更正為 `'Critical'` |
-| 4 | 🟡 中 | `pages/VulnScan.jsx` | 「優先修補清單」VPR 欄位的 render 函式未對 `null` 值做保護，當 `vpr` 為 `null` 時 `parseFloat(null).toFixed(1)` 回傳 `"NaN"` 並顯示在畫面上 | 加入 `v != null` 判斷，`null` 時顯示 `—` |
-| 5 | 🟢 低 | `backend/services/nessus_parser.py` | 內部函式 `g()` 在每次迴圈疊代中重新定義，且透過閉包隱含捕獲外部 `row` 變數；`_find_col()` 在每次欄位存取時都重新查找，但欄位映射在整個解析過程中不會改變 | 在迴圈前預先建立 `col_map` 字典；以預設引數 `_row=row` 明確綁定當次的 `row`，消除閉包隱患 |
-| 5b | 🟢 低 | `backend/services/audit_parser.py` | 同上，`g()` 函式在疊代中透過閉包捕獲 `row` | 同樣改為預設引數 `_row=row` |
+### 第二輪（2026-04-28）
 
-### 修復前後對照
+| # | 嚴重度 | 檔案 | 問題 | 修復 |
+|---|--------|------|------|------|
+| 1 | 🔴 高 | `deploy/nginx.conf` | 缺少 HTTP→HTTPS 強制跳轉；HTTPS block 完全被註解；無任何安全標頭（X-Frame-Options 等），ISMS 系統裸 HTTP 運行 | 新增 80 埠 301 重導向；啟用 HTTPS block；加入 `X-Frame-Options`、`X-Content-Type-Options`、`X-XSS-Protection`、`Referrer-Policy`、`HSTS` |
+| 2 | 🔴 高 | `pages/Login.jsx` | 登入頁明文顯示預設憑證 `admin / admin`，攻擊者一眼可見初始帳密 | 改為「請聯繫系統管理員取得帳號資訊」，不在前端暴露任何憑證 |
+| 3 | 🟡 中 | `backend/services/diff_service.py` | `_audit_key()` 以 `str(r.id)` 為回退；DB 自增 ID 跨掃描不同，匿名檢查項目永遠被誤判為「新增失敗」而非「持續失敗」 | 回退改為 `""`，使匿名項目能跨掃描正確比對 |
+| 4 | 🟡 中 | `pages/VulnScan.jsx` | CVSS 欄位用 `\|\|` 回退，合法值 `0` 被視為 falsy 而顯示 `—` | 改用 `??`（nullish coalescing），僅 `null`/`undefined` 時顯示 `—` |
+| 5 | 🟡 中 | `backend/services/cve_parser.py` | NVD synopsis 截斷至 300 字元未加 `…`，使用者無從得知內容被截斷 | 截斷後補上 `…` 省略號 |
+| 6 | 🟢 低 | `backend/services/epss_service.py` | `except Exception: pass` 靜默吞掉所有 EPSS 錯誤，管理員無法診斷網路或限速問題 | 改為 `logger.warning(...)` 輸出 chunk index 與例外訊息 |
+| 7 | 🟢 低 | `deploy/secvision.service` | `Restart=always` 無重啟次數上限，資料庫離線時觸發無限重啟風暴 | 改為 `Restart=on-failure`；加入 `StartLimitBurst=5` / `StartLimitIntervalSec=60` |
 
-**Bug 3（風險矩陣資料錯誤）影響範圍：**
-- Dashboard 首頁 Critical 計數：Q3 掃描少計 2 筆（Text4Shell + SambaCry），後兩期少計 1 筆（Text4Shell）
-- VulnScan 風險矩陣圓餅圖：Medium 過多、Critical 不足
-- 優先修補清單：Text4Shell（EPSS 0.290, CVSS 9.8）本應進入「🔴 優先修補」象限但因標記為 Medium 而遺漏
+### 安裝測試（2026-04-28）
 
----
-
-## QA 測試報告（第二輪，2026-04-27）
-
-以下為第二輪 QA 審查發現並已修復的問題：
-
-| # | 嚴重度 | 檔案 | 問題描述 | 修復方式 |
-|---|--------|------|----------|----------|
-| 1 | 🔴 高 | `deploy/nginx.conf` | 未設定 HTTP→HTTPS 強制跳轉；缺少 `X-Frame-Options`、`X-Content-Type-Options`、`X-XSS-Protection`、`Referrer-Policy`、`Strict-Transport-Security` 等安全標頭；HTTPS server block 完全被註解，等同裸 HTTP 提供 ISMS 服務 | 新增 80 埠 301 重導向 block；啟用 HTTPS server block 並加入五個安全標頭 |
-| 2 | 🔴 高 | `pages/Login.jsx` | 登入頁明文顯示預設憑證 `admin / admin`，對資安管理系統（ISMS）是嚴重的安全反模式，攻擊者一眼即知初始帳密 | 改為「請聯繫系統管理員取得帳號資訊」提示文字，不在前端暴露任何憑證 |
-| 3 | 🟡 中 | `backend/services/diff_service.py` | `_audit_key()` 在 `check_name` 為 `None` 時回退至 `str(r.id)`；由於 DB 自動遞增 ID 在不同掃描中各自獨立，同一筆匿名檢查項目的 base 與 compare ID 絕不相同，造成 diff 將其誤判為「新增失敗」而非「持續失敗」 | 回退改為空字串 `""`，使匿名項目能在跨掃描比對時正確合併 |
-| 4 | 🟡 中 | `pages/VulnScan.jsx` | 弱點詳情展開列與優先修補清單 CVSS 欄位使用 `\|\|` 做顯示回退，當 CVSS 合法值為 `0` 時被視為 falsy 而錯誤顯示 `—` | 改用 `??`（nullish coalescing），只有 `null`/`undefined` 才顯示 `—` |
-| 5 | 🟡 中 | `backend/services/cve_parser.py` | NVD JSON 解析時 synopsis 截斷至 300 字元但未加 `…`，使用者無從得知內容被截斷 | 截斷後補上 `…` 省略號 |
-| 6 | 🟢 低 | `backend/services/epss_service.py` | `except Exception: pass` 靜默吞掉所有 EPSS API 錯誤，管理員無法得知 EPSS 富化失敗的原因（網路、限速等） | 改為 `logger.warning(...)` 輸出帶有 chunk index 與例外訊息的警告，便於排查 |
-| 7 | 🟢 低 | `deploy/secvision.service` | `Restart=always` 搭配固定 `RestartSec=5` 且無重啟次數上限，若資料庫長時間離線會觸發無限重啟風暴，耗盡系統資源 | 改為 `Restart=on-failure`，並加入 `StartLimitBurst=5` / `StartLimitIntervalSec=60`，60 秒內重啟超過 5 次則停止服務 |
-
-### 修復前後對照
-
-**Bug 3（audit diff ID 碰撞）影響範圍：**
-- NIST 頁面版本 Diff 比對：`check_name` 為空的項目永遠出現在「新增失敗」清單而非「持續失敗」
-- 可能誇大 `new_failures` 計數，使趨勢圖失真
-
-**Bug 4（CVSS falsy-0）影響範圍：**
-- CVSS = 0.0 的弱點（部分資訊類外掛）在展開詳情與優先修補清單中顯示 `—` 而非 `0`
-- 不影響邏輯計算，但視覺呈現錯誤
+| # | 嚴重度 | 檔案 | 問題 | 修復 |
+|---|--------|------|------|------|
+| 8 | 🔴 高 | `backend/requirements.txt` | 未釘選 bcrypt 版本，pip 解析至 bcrypt 5.x；passlib 1.7.4 依賴 `bcrypt.__about__.__version__`（4.1.0 起移除），導致所有密碼雜湊在執行期拋出 `AttributeError`，認證系統完全失效 | 加入 `bcrypt==4.0.1` 釘選相容版本 |
 
 ---
 
