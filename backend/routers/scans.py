@@ -76,9 +76,15 @@ async def upload_scan(
             pass
 
     if filename.endswith(".csv"):
-        parsed = parse_nessus_csv(content, name, parsed_date)
+        try:
+            parsed = parse_nessus_csv(content, name, parsed_date)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
     elif filename.endswith(".json"):
-        parsed = parse_nvd_json(content, name, parsed_date)
+        try:
+            parsed = parse_nvd_json(content, name, parsed_date)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
     else:
         raise HTTPException(status_code=400, detail="Unsupported file type. Upload .csv or .json")
 

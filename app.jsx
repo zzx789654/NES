@@ -48,7 +48,7 @@ function Sidebar({ page, setPage, stats, onLogout }) {
           const cnt = counts[item.id];
           return (
             <button key={item.id} onClick={() => setPage(item.id)}
-              style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px',borderRadius:'var(--r)',marginBottom:2,background:active?'var(--accent-bg)':'transparent',color:active?'var(--accent)':'var(--text2)',border:`1px solid ${active?'var(--accent-bg)':'transparent'}`,transition:'all 0.15s',textAlign:'left',cursor:'pointer'}}
+              style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px',borderRadius:'var(--r)',marginBottom:2,background:active?'var(--accent-bg)':'transparent',color:active?'var(--accent)':'var(--text2)',border:`1px solid ${active?'var(--accent)':'var(--border)'}`,transition:'all 0.15s',textAlign:'left',cursor:'pointer'}}
               onMouseEnter={e=>{ if(!active){ e.currentTarget.style.background='var(--surface2)'; e.currentTarget.style.color='var(--text)'; }}}
               onMouseLeave={e=>{ if(!active){ e.currentTarget.style.background='transparent'; e.currentTarget.style.color='var(--text2)'; }}}>
               <div>

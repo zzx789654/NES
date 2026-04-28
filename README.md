@@ -1,164 +1,204 @@
- (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
-diff --git a/README.md b/README.md
-index 2960b1e8cbb5bb5efa8b8e7dd2a1e4ef131eb058..a16d28040be527f71fa375aa9642678fb0adf5ac 100644
---- a/README.md
-+++ b/README.md
-@@ -122,72 +122,153 @@ NES/
- │   ├── secvision.service   # ★ systemd 服務設定
- │   └── install.sh          # ★ Ubuntu 快速部署腳本
- ├── README.md               # 本文件
- └── 待修改.md               # 待辦改善項目（進度追蹤）
- ```
- 
- > ★ 為本次新增檔案
- 
- ---
- 
- ## 認證說明
- 
- 應用程式啟動時會檢查 `sessionStorage` 中的 JWT token：
- 
- - **有 token** → 直接進入主畫面
- - **無 token** → 顯示登入頁
- 
- 登入頁提供兩種模式：
- | 模式 | 說明 |
- |------|------|
- | 帳號密碼登入 | POST `/api/auth/token`，取得 JWT 存入 `sessionStorage` |
- | Demo 模式 | 設定 `__demo__` 旗標，跳過後端，使用 MockAPI 本地資料 |
- 
- ---
- 
-+
-+### 初始化第一個管理者帳號（首次部署）
-+
-+若資料庫還沒有 `users` table 或沒有任何帳號，可在伺服器執行：
-+
-+```bash
-+cd ~/NES/deploy
-+sudo bash create-admin.sh admin 'Admin@123456' admin
-+```
-+
-+> 腳本會自動建立資料表（若不存在），並建立或更新該帳號密碼。
-+
- ## 本地執行
- 
- 不需要 build 工具，直接以任意 HTTP 伺服器提供靜態檔案即可：
- 
- ```bash
- # Python 3
- python3 -m http.server 8080
- 
- # Node.js（npx）
- npx serve .
- ```
- 
- 開啟瀏覽器至 `http://localhost:8080`，點選「Demo 模式」即可無需後端體驗完整功能。
- 
- ---
- 
- ## 生產環境部署（Ubuntu）
- 
- ```bash
--# 快速部署（自動安裝依賴、建立資料庫、設定 Nginx + systemd）
-+# 快速部署（自動安裝依賴、建立資料庫、建立預設管理者、設定 Nginx + systemd）
- cd deploy/
- sudo bash install.sh
-+
-+# 可選：覆寫預設管理者帳密
-+# sudo ADMIN_USER=secadmin ADMIN_PASS='StrongPass!234' bash install.sh
- ```
- 
--詳細設定請參考 `deploy/nginx.conf` 與 `deploy/secvision.service`。
-+`install.sh` 完成後會自動顯示伺服器 IP、API 入口與預設管理者帳密。
-+
-+詳細設定請參考 `deploy/nginx.conf` 與 `deploy/secvision.service`（`nginx.conf` 預設 `server_name _;`，可直接用 IP 測試）。
- 
- ---
- 
-+
-+## 常見連線問題（Connection Refused on :8000）
-+
-+若你安裝完成後以 `http://YOUR_SERVER_IP:8000` 測試，出現「被拒絕連線」，常見原因有：
-+
-+1. `secvision.service` 只綁定 `127.0.0.1`（僅本機可連）
-+2. 雲端 Security Group / 防火牆未開放 8000
-+3. 服務未啟動成功（`systemctl status secvision`）
-+
-+本專案預設建議的對外入口其實是 Nginx `:80`：
-+
-+- 前端：`http://YOUR_SERVER_IP/`
-+- API：`http://YOUR_SERVER_IP/api/docs`
-+
-+若你真的需要直接對外開放 8000，可編輯 `/etc/systemd/system/secvision.service` 讓 Uvicorn 綁定 `0.0.0.0`，然後：
-+
-+```bash
-+sudo systemctl daemon-reload
-+sudo systemctl restart secvision
-+sudo ss -lntp | grep 8000
-+```
-+
-+
-+### `/docs` 可開但 `/` 還是 404 的原因
-+
-+這通常代表你已經重啟了服務，但正在跑的仍是舊版程式碼（`/opt/secvision/backend` 尚未同步最新 repo）。
-+
-+請在伺服器上執行（建議用專用腳本，會同步 backend + frontend）：
-+
-+```bash
-+cd ~/NES/deploy
-+sudo bash redeploy-backend.sh YOUR_SERVER_IP
-+```
-+
-+> 腳本會先等待 `127.0.0.1:8000/health` 就緒（最多 30 秒），避免剛重啟瞬間檢查造成誤判 `connection refused`。
-+> 若腳本提示 `/` 回傳 404，表示目前執行中的後端版本尚未包含 root 路由；但只要 `/health` 與 `/docs` 正常，API 服務仍可使用。
-+> 若 `http://YOUR_SERVER_IP/index.html` 回傳 404，通常是 `/var/www/secvision` 尚未同步前端檔案；此腳本會一併修正。
-+
-+若不使用腳本，也可手動執行：
-+
-+```bash
-+cd ~/NES
-+sudo cp -a backend/. /opt/secvision/backend/
-+sudo chown -R secvision:secvision /opt/secvision/backend
-+sudo cp index.html app.jsx components.jsx mock-api.js api-client.js /var/www/secvision/
-+sudo cp -r pages /var/www/secvision/
-+sudo chown -R www-data:www-data /var/www/secvision
-+sudo cp deploy/nginx.conf /etc/nginx/sites-available/secvision
-+sudo ln -sf /etc/nginx/sites-available/secvision /etc/nginx/sites-enabled/secvision
-+sudo rm -f /etc/nginx/sites-enabled/default
-+sudo nginx -t
-+sudo systemctl daemon-reload
-+sudo systemctl restart secvision
-+sudo systemctl reload nginx
-+```
-+
-+然後再驗證：
-+
-+```bash
-+curl http://YOUR_SERVER_IP:8000/health
-+curl -I http://YOUR_SERVER_IP:8000/docs
-+curl -I http://YOUR_SERVER_IP/index.html
-+```
-+
- ## 技術棧
- 
- | 類別 | 技術 |
- |------|------|
- | 框架 | React 18（CDN UMD） |
- | JSX 編譯 | Babel Standalone |
- | 圖表 | Chart.js 4.4.0 |
- | 字體 | IBM Plex Sans / Mono |
- | 認證 | JWT（python-jose）via `/api/auth/token` |
- | API 客戶端 | `api-client.js`（原生 fetch + Bearer token） |
- | 持久化（Demo） | localStorage / MockAPI |
- | 持久化（生產） | FastAPI + PostgreSQL 16 |
- | 部署 | Nginx + systemd on Ubuntu 24.04 / 22.04 |
- 
- ---
- 
- ## 授權
- 
- Internal use only.
- 
-EOF
-)
+# SecVision ISMS Portal (NES)
+
+SecVision 是一套以 **前端儀表板 + FastAPI 後端 API** 組成的資安管理入口，涵蓋：
+
+- 弱點掃描（Nessus CSV / NVD JSON）
+- NIST 稽核掃描（Audit CSV）
+- 掃描差異比較（Diff）
+- Dashboard 匯總統計
+- JWT 驗證與角色權限（admin / analyst / viewer）
+- IP 群組管理
+
+---
+
+## 專案結構
+
+```text
+NES/
+├── index.html
+├── app.jsx
+├── api-client.js
+├── mock-api.js
+├── components.jsx
+├── pages/
+│   ├── Login.jsx
+│   ├── Dashboard.jsx
+│   ├── VulnScan.jsx
+│   └── NIST.jsx
+├── backend/
+│   ├── main.py
+│   ├── config.py
+│   ├── database.py
+│   ├── models/
+│   ├── routers/
+│   ├── schemas/
+│   ├── services/
+│   └── tests/
+├── deploy/
+└── 待修改.md
+```
+
+---
+
+## 執行模式
+
+### 1) Demo 模式
+
+- 前端以 `mock-api.js` 提供資料
+- 不依賴後端
+- 適合 UI 展示與快速體驗
+
+### 2) 後端模式
+
+- 登入後使用 JWT 呼叫 `/api/*`
+- 使用 FastAPI + PostgreSQL（測試環境可用 SQLite）
+
+---
+
+## 本地開發
+
+### 前端（靜態）
+
+```bash
+python3 -m http.server 8080
+# 或
+npx serve .
+```
+
+開啟：`http://localhost:8080`
+
+### 後端
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --host 127.0.0.1 --port 8000
+```
+
+API 文件：`http://127.0.0.1:8000/docs`
+
+---
+
+## API 摘要
+
+### Auth
+
+- `POST /api/auth/token`：登入取得 JWT
+- `GET /api/auth/me`：取得目前使用者
+- `POST /api/auth/register`：管理員建立帳號
+
+### Scans
+
+- `GET /api/scans`
+- `GET /api/scans/{id}`
+- `POST /api/scans/upload`
+- `DELETE /api/scans/{id}`
+- `GET /api/scans/diff?base=&comp=`
+
+### NIST
+
+- `GET /api/nist/scans`
+- `GET /api/nist/scans/{id}`
+- `POST /api/nist/upload`
+- `DELETE /api/nist/scans/{id}`
+- `GET /api/nist/diff?base=&comp=`
+- `GET /api/nist/trend`
+
+### Dashboard
+
+- `GET /api/dashboard`
+
+### IP Groups
+
+- `GET /api/ipgroups`
+- `POST /api/ipgroups`
+- `PUT /api/ipgroups/{id}`
+- `DELETE /api/ipgroups/{id}`
+
+---
+
+## 2026-04-28 修正重點
+
+### ✅ CORS 設定修正
+
+`backend/main.py` 的 CORS 已正確套用：
+
+- `allow_origins`（由 `ALLOWED_ORIGINS` 控制）
+- `allow_credentials`
+- `allow_methods`
+- `allow_headers`
+
+### ✅ API Client 重複邏輯精簡
+
+`api-client.js` 抽出 `reqForm()`：
+
+- `uploadScan()` / `uploadAudit()` 共用 FormData 請求流程
+- 401 未授權處理與錯誤訊息解析一致化
+
+### ✅ IP 群組更新重名防護
+
+`PUT /api/ipgroups/{id}` 現在會檢查是否重名，若衝突回傳 `409`。
+
+### ✅ 上傳資料必要欄位驗證
+
+- Nessus CSV：缺 `risk / host / name` 時回傳 `400`
+- Audit CSV：缺 `check_name / status` 時回傳 `400`
+
+---
+
+## 測試
+
+```bash
+cd backend
+pytest -q
+```
+
+本次新增測試覆蓋：
+
+- CORS header 回應
+- IP 群組 rename 重名衝突
+- Nessus 缺必要欄位
+- Audit 缺必要欄位
+
+---
+
+## 部署（Ubuntu）
+
+建議使用 `deploy/` 內腳本進行安裝、重部署與管理者初始化：
+
+- `deploy/install.sh`
+- `deploy/redeploy-backend.sh`
+- `deploy/create-admin.sh`
+- `deploy/smoke-test.sh`
+
+### 自動安裝流程重點（2026-04 修正）
+
+- 安裝腳本會建立 `/opt/secvision/backend/.env`，寫入 `DATABASE_URL`、`SECRET_KEY` 與 `ALLOWED_ORIGINS`。
+- PostgreSQL 使用者 `secvision` 會在部署時同步更新密碼，避免帳密不一致導致無法登入。
+- 安裝結束會自動驗證管理者登入，並執行核心 API smoke test。
+
+### 手動驗證可登入與功能可用
+
+```bash
+# 以安裝時輸出的帳號密碼驗證
+bash deploy/smoke-test.sh http://127.0.0.1:8000 admin '你的管理者密碼'
+```
+
+若回傳 `✅ Smoke test passed`，代表登入與核心 API（dashboard / scans / nist / ipgroups）可正常呼叫。
+
+---
+
+## 授權
+
+Internal use only.
+
+---
+
+## UI 可視性優化建議（前端）
+
+- 提高深色主題下邊框對比（已調整 `--border` / `--border-strong`）。
+- 強化輸入欄位 hover/focus 狀態（focus ring + 背景變化）。
+- Secondary / Ghost 按鈕加入明確邊框與 hover 狀態，減少「看不出可點擊」問題。
+- Card 與 Tab active 狀態增加可視層次（邊框、背景、陰影）以強化資訊分群。

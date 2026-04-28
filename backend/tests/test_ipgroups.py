@@ -48,6 +48,25 @@ def test_update_group_not_found(client, admin_token):
     assert resp.status_code == 404
 
 
+def test_update_group_duplicate_name_conflict(client, admin_token):
+    g1 = client.post(
+        "/api/ipgroups",
+        json={"name": "GroupA", "ips": ["1.1.1.1"]},
+        headers=auth(admin_token),
+    ).json()["id"]
+    client.post(
+        "/api/ipgroups",
+        json={"name": "GroupB", "ips": ["2.2.2.2"]},
+        headers=auth(admin_token),
+    )
+    resp = client.put(
+        f"/api/ipgroups/{g1}",
+        json={"name": "GroupB"},
+        headers=auth(admin_token),
+    )
+    assert resp.status_code == 409
+
+
 def test_delete_group(client, admin_token):
     group_id = client.post(
         "/api/ipgroups",

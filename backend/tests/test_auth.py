@@ -7,6 +7,12 @@ def test_health(client):
     assert resp.json() == {"status": "ok"}
 
 
+def test_cors_header_present_on_origin_request(client):
+    resp = client.get("/health", headers={"Origin": "http://localhost:8080"})
+    assert resp.status_code == 200
+    assert resp.headers.get("access-control-allow-origin") == "*"
+
+
 def test_login_success(client, db):
     _seed_user(db, "alice", "pass123", "viewer")
     resp = client.post("/api/auth/token", data={"username": "alice", "password": "pass123"})

@@ -36,11 +36,33 @@ const APIClient = (() => {
     return res.json();
   }
 
+  async function reqForm(path, formData) {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: formData,
+    });
+    if (res.status === 401) {
+      sessionStorage.removeItem(TOKEN_KEY);
+      window.dispatchEvent(new CustomEvent('secvision:unauthorized'));
+      throw new Error('未授權，請重新登入');
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + res.status);
+    }
+    return res.json();
+  }
+
   return {
     // ─── Auth ────────────────────────────────────────────────────────────────
 
     isLoggedIn() {
       return !!getToken();
+    },
+
+    isDemoMode() {
+      return getToken() === '__demo__';
     },
 
     async login(username, password) {
@@ -95,22 +117,7 @@ const APIClient = (() => {
       const form = new FormData();
       form.append('file', file);
       if (name) form.append('name', name);
-      return fetch('/api/scans/upload', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: form,
-      }).then(async res => {
-        if (res.status === 401) {
-          sessionStorage.removeItem(TOKEN_KEY);
-          window.dispatchEvent(new CustomEvent('secvision:unauthorized'));
-          throw new Error('未授權，請重新登入');
-        }
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || 'HTTP ' + res.status);
-        }
-        return res.json();
-      });
+      return reqForm('/api/scans/upload', form);
     },
 
     // ─── NIST Audit ──────────────────────────────────────────────────────────
@@ -135,22 +142,7 @@ const APIClient = (() => {
       const form = new FormData();
       form.append('file', file);
       if (name) form.append('name', name);
-      return fetch('/api/nist/upload', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: form,
-      }).then(async res => {
-        if (res.status === 401) {
-          sessionStorage.removeItem(TOKEN_KEY);
-          window.dispatchEvent(new CustomEvent('secvision:unauthorized'));
-          throw new Error('未授權，請重新登入');
-        }
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || 'HTTP ' + res.status);
-        }
-        return res.json();
-      });
+      return reqForm('/api/nist/upload', form);
     },
 
     // ─── IP Groups ───────────────────────────────────────────────────────────

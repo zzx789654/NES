@@ -135,7 +135,7 @@ function Tabs({ tabs, active, onChange }) {
     <div style={{display:'flex',borderBottom:'1px solid var(--border)',gap:0}}>
       {tabs.map(t => (
         <button key={t.id} onClick={() => onChange(t.id)}
-          style={{padding:'10px 18px',fontSize:13,fontWeight:500,color:active===t.id?'var(--accent)':'var(--text2)',borderBottom:`2px solid ${active===t.id?'var(--accent)':'transparent'}`,transition:'all 0.15s',background:'none',display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap'}}
+          style={{padding:'10px 18px',fontSize:13,fontWeight:500,color:active===t.id?'var(--accent)':'var(--text2)',borderBottom:`2px solid ${active===t.id?'var(--accent)':'transparent'}`,transition:'all 0.15s',background:active===t.id?'var(--accent-bg)':'none',display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap'}}
           onMouseEnter={e=>{ if(active!==t.id) e.currentTarget.style.color='var(--text)'; }}
           onMouseLeave={e=>{ if(active!==t.id) e.currentTarget.style.color='var(--text2)'; }}>
           {t.icon && <span style={{fontSize:15}}>{t.icon}</span>}
@@ -162,19 +162,19 @@ function PageHeader({ title, subtitle, actions }) {
 
 // ─── Btn ──────────────────────────────────────────────────────────────────────
 function Btn({ children, onClick, variant='primary', size='md', disabled, style: extraStyle }) {
-  const base = {display:'inline-flex',alignItems:'center',gap:6,borderRadius:'var(--rsm)',fontWeight:500,cursor:disabled?'not-allowed':'pointer',opacity:disabled?0.5:1,transition:'all 0.15s',border:'1px solid transparent',whiteSpace:'nowrap'};
+  const base = {display:'inline-flex',alignItems:'center',gap:6,borderRadius:'var(--rsm)',fontWeight:500,cursor:disabled?'not-allowed':'pointer',opacity:disabled?0.5:1,transition:'all 0.15s',border:'1px solid transparent',whiteSpace:'nowrap',boxShadow:'0 1px 2px oklch(0 0 0 / 0.12)'};
   const sizes = { sm:{padding:'4px 10px',fontSize:12}, md:{padding:'7px 14px',fontSize:13}, lg:{padding:'9px 18px',fontSize:14} };
   const variants = {
     primary:  { background:'var(--accent)',color:'oklch(0.1 0 0)',border:'1px solid var(--accent)' },
-    secondary:{ background:'var(--surface2)',color:'var(--text)',border:'1px solid var(--border)' },
+    secondary:{ background:'var(--surface2)',color:'var(--text)',border:'1px solid var(--border-strong)' },
     danger:   { background:'var(--critical-bg)',color:'var(--critical)',border:'1px solid var(--critical)' },
-    ghost:    { background:'transparent',color:'var(--text2)',border:'1px solid transparent' },
+    ghost:    { background:'transparent',color:'var(--text2)',border:'1px solid var(--border)' },
   };
   return (
     <button disabled={disabled} onClick={onClick}
       style={{...base,...sizes[size],...variants[variant],...extraStyle}}
-      onMouseEnter={e=>{ if(!disabled){ if(variant==='primary') e.currentTarget.style.background='var(--accent-h)'; else if(variant==='secondary') e.currentTarget.style.borderColor='var(--accent)'; }}}
-      onMouseLeave={e=>{ if(variant==='primary') e.currentTarget.style.background='var(--accent)'; else if(variant==='secondary') e.currentTarget.style.borderColor='var(--border)'; }}>
+      onMouseEnter={e=>{ if(!disabled){ if(variant==='primary') e.currentTarget.style.background='var(--accent-h)'; else if(variant==='secondary' || variant==='ghost') { e.currentTarget.style.borderColor='var(--accent)'; e.currentTarget.style.background='var(--accent-bg)'; e.currentTarget.style.color='var(--accent)'; } }}}
+      onMouseLeave={e=>{ if(variant==='primary') e.currentTarget.style.background='var(--accent)'; else if(variant==='secondary'){ e.currentTarget.style.borderColor='var(--border-strong)'; e.currentTarget.style.background='var(--surface2)'; e.currentTarget.style.color='var(--text)'; } else if(variant==='ghost'){ e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.background='transparent'; e.currentTarget.style.color='var(--text2)'; } }}>
       {children}
     </button>
   );
@@ -183,7 +183,7 @@ function Btn({ children, onClick, variant='primary', size='md', disabled, style:
 // ─── Card ─────────────────────────────────────────────────────────────────────
 function Card({ children, style: extra, title, action, noPad }) {
   return (
-    <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--rlg)',overflow:'hidden',...extra}}>
+    <div style={{background:'var(--surface)',border:'1px solid var(--border-strong)',borderRadius:'var(--rlg)',overflow:'hidden',boxShadow:'var(--shadow)',...extra}}>
       {title && (
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 18px',borderBottom:'1px solid var(--border)'}}>
           <div style={{fontWeight:600,fontSize:13,letterSpacing:'0.01em'}}>{title}</div>

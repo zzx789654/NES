@@ -107,6 +107,19 @@ def test_upload_requires_analyst_or_admin(client, viewer_token):
     assert resp.status_code == 403
 
 
+def test_upload_nessus_missing_required_columns(client, admin_token):
+    bad_csv = b"Plugin ID,CVE,Port\\n123,CVE-2024-0001,443\\n"
+    with patch("routers.scans.fetch_epss_scores", new=AsyncMock(return_value={})):
+        resp = client.post(
+            "/api/scans/upload",
+            data={"name": "Bad Scan"},
+            files={"file": ("scan.csv", io.BytesIO(bad_csv), "text/csv")},
+            headers=auth(admin_token),
+        )
+    assert resp.status_code == 400
+    assert "Missing required Nessus columns" in resp.json()["detail"]
+
+
 def test_scan_requires_auth(client):
     resp = client.get("/api/scans")
     assert resp.status_code == 401

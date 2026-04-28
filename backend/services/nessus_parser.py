@@ -36,6 +36,10 @@ def parse_nessus_csv(content: bytes, scan_name: str, scan_date: date | None = No
     df.columns = df.columns.str.strip()
 
     col_map = {key: _find_col(df, key) for key in COL_ALIASES}
+    required = ("risk", "host", "name")
+    missing = [k for k in required if not col_map.get(k)]
+    if missing:
+        raise ValueError(f"Missing required Nessus columns: {', '.join(missing)}")
 
     vulns = []
     hosts = set()
