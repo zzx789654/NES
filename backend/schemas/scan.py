@@ -3,20 +3,53 @@ from pydantic import BaseModel
 
 
 class VulnerabilityBase(BaseModel):
+    # 基本識別
     plugin_id: str | None = None
     cve: str | None = None
+    
+    # 風險分類
     risk: str | None = None
+    risk_factor: str | None = None
+    stig_severity: str | None = None
+    
+    # 位置信息
     host: str | None = None
     port: str | None = None
     protocol: str | None = None
+    
+    # 外掛信息
     name: str | None = None
-    cvss: float | None = None
-    epss: float | None = None
-    vpr: float | None = None
     synopsis: str | None = None
     description: str | None = None
     solution: str | None = None
     plugin_output: str | None = None
+    see_also: str | None = None
+    
+    # CVSS 評分 - 多版本
+    cvss_v2_base: float | None = None
+    cvss_v2_temporal: float | None = None
+    cvss_v3_base: float | None = None
+    cvss_v3_temporal: float | None = None
+    cvss_v4_base: float | None = None
+    cvss_v4_threat_score: float | None = None
+    
+    # 風險指標
+    vpr: float | None = None
+    epss: float | None = None
+    
+    # 參考信息
+    bid: str | None = None
+    xref: str | None = None
+    mskb: str | None = None
+    
+    # 元數據
+    plugin_publication_date: date | None = None
+    plugin_modification_date: date | None = None
+    
+    # 利用方式
+    metasploit: bool = False
+    core_impact: bool = False
+    canvas: bool = False
 
 
 class VulnerabilityOut(VulnerabilityBase):
