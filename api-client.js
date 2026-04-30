@@ -9,7 +9,7 @@ const APIClient = (() => {
 
   function authHeaders() {
     const token = getToken();
-    if (token && token !== '__demo__') {
+    if (token) {
       return { 'Authorization': 'Bearer ' + token };
     }
     return {};
@@ -57,10 +57,6 @@ const APIClient = (() => {
       const data = await res.json();
       sessionStorage.setItem(TOKEN_KEY, data.access_token);
       return data;
-    },
-
-    loginDemo() {
-      sessionStorage.setItem(TOKEN_KEY, '__demo__');
     },
 
     logout() {

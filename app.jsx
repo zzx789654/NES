@@ -18,7 +18,7 @@ const NAV = [
 function Sidebar({ page, setPage, stats, onLogout }) {
   const counts = {
     dashboard: null,
-    vulnscan:  stats ? stats.severityCounts.Critical + stats.severityCounts.High : null,
+    vulnscan:  stats && stats.risk ? stats.risk.critical + stats.risk.high : null,
     nist:      null,
   };
 
@@ -109,8 +109,14 @@ function App() {
     return () => window.removeEventListener('secvision:unauthorized', handleUnauth);
   }, []);
 
+  const refreshStats = () => {
+    APIClient.getDashboardStats()
+      .then(data => setStats(data))
+      .catch(() => setStats(null));
+  };
+
   useEffect(() => {
-    setStats(MockAPI.getDashboardStats());
+    refreshStats();
     applyTweaks(TWEAK_DEFAULTS);
   }, []);
 
@@ -134,7 +140,7 @@ function App() {
     <div style={{display:'flex',height:'100vh',overflow:'hidden'}}>
       <Sidebar page={page} setPage={setPage} stats={stats} onLogout={() => { APIClient.logout(); setIsLoggedIn(false); }} />
       <main style={{flex:1,overflow:'auto',background:'var(--bg)',padding:'24px 32px'}}>
-        <PageComponent onNavigate={setPage} onStatsChange={() => setStats(MockAPI.getDashboardStats())} />
+        <PageComponent onNavigate={setPage} onStatsChange={refreshStats} />
       </main>
     </div>
   );

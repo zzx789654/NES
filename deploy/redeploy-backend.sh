@@ -28,7 +28,6 @@ sudo mkdir -p "$WEB_DIR"
 sudo cp "$REPO_DIR/index.html" \
         "$REPO_DIR/app.jsx" \
         "$REPO_DIR/components.jsx" \
-        "$REPO_DIR/mock-api.js" \
         "$REPO_DIR/api-client.js" \
         "$WEB_DIR/"
 sudo cp -r "$REPO_DIR/pages" "$WEB_DIR/"
