@@ -23,7 +23,8 @@ _credentials = "*" not in _origins
 
 app.add_middleware(
     CORSMiddleware,
-
+    allow_origins=_origins,
+    allow_credentials=_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

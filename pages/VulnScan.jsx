@@ -729,6 +729,10 @@ function VulnScanPage({ onStatsChange }) {
                     ) : filteredDiff.map((row, index) => {
                       const bg = row.status === 'new' ? 'var(--diff-new)' : row.status === 'resolved' ? 'var(--diff-resolved)' : 'transparent';
                       const label = row.status === 'new' ? '🔴 新增' : row.status === 'resolved' ? '🟢 已解決' : '🔵 持續';
+                      const epssVal = row.epss != null ? parseFloat(row.epss) : null;
+                      const vprVal = row.vpr != null ? parseFloat(row.vpr) : null;
+                      const epssHighlight = epssVal != null && epssVal >= 0.1;
+                      const vprHighlight = vprVal != null && vprVal >= 7;
                       return (
                         <tr key={`${row.id}-${index}`} style={{ borderBottom: '1px solid var(--border)', background: bg }}>
                           <td style={{ padding: '10px 12px', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}>{label}</td>
@@ -738,8 +742,8 @@ function VulnScanPage({ onStatsChange }) {
                           <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{row.plugin_id || '—'}</td>
                           <td style={{ padding: '10px 12px', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.name}>{row.name || '—'}</td>
                           <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{row.cvss_v3_base != null ? parseFloat(row.cvss_v3_base).toFixed(1) : '—'}</td>
-                          <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: row.epss != null && parseFloat(row.epss) >= 0.1 ? 'var(--critical)' : 'var(--text2)', fontWeight: row.epss != null && parseFloat(row.epss) >= 0.1 ? 700 : 400 }>{row.epss != null ? parseFloat(row.epss).toFixed(3) : '—'}</td>
-                          <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: row.vpr != null && parseFloat(row.vpr) >= 7 ? 'var(--critical)' : 'var(--text2)', fontWeight: row.vpr != null && parseFloat(row.vpr) >= 7 ? 700 : 400 }>{row.vpr != null ? parseFloat(row.vpr).toFixed(1) : '—'}</td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: epssHighlight ? 'var(--critical)' : 'var(--text2)', fontWeight: epssHighlight ? 700 : 400 }}>{epssVal != null ? epssVal.toFixed(3) : '—'}</td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: vprHighlight ? 'var(--critical)' : 'var(--text2)', fontWeight: vprHighlight ? 700 : 400 }}>{vprVal != null ? vprVal.toFixed(1) : '—'}</td>
                           <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text2)' }}>{row.cve || '—'}</td>
                         </tr>
                       );

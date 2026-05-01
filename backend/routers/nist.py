@@ -1,6 +1,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy import nulls_last
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/api/nist", tags=["nist"])
 def list_audit_scans(db: Session = Depends(get_db), _=Depends(get_current_user)):
     return (
         db.query(AuditScan)
-        .order_by(AuditScan.scan_date.desc().nullslast(), AuditScan.uploaded_at.desc())
+        .order_by(nulls_last(AuditScan.scan_date.desc()), AuditScan.uploaded_at.desc())
         .all()
     )
 

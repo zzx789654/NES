@@ -1,6 +1,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy import nulls_last
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/api/scans", tags=["scans"])
 
 @router.get("", response_model=list[ScanOut])
 def list_scans(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    return db.query(Scan).order_by(Scan.scan_date.desc().nullslast(), Scan.uploaded_at.desc()).all()
+    return db.query(Scan).order_by(nulls_last(Scan.scan_date.desc()), Scan.uploaded_at.desc()).all()
 
 
 @router.get("/diff", response_model=ScanDiff)
@@ -54,7 +55,7 @@ def get_host_history(host: str, db: Session = Depends(get_db), _=Depends(get_cur
         db.query(Scan)
         .options(selectinload(Scan.vulnerabilities))
         .filter(Scan.vulnerabilities.any(Vulnerability.host == host))
-        .order_by(Scan.scan_date.desc().nullslast(), Scan.uploaded_at.desc(), Scan.id.desc())
+        .order_by(nulls_last(Scan.scan_date.desc()), Scan.uploaded_at.desc(), Scan.id.desc())
         .all()
     )
 
