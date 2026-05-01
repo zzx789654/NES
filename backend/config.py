@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-key-change-in-production"
     access_token_expire_minutes: int = 480
     algorithm: str = "HS256"
+    password_expire_days: int = 90  # default expiry for new accounts (0 = never)
 
 
 settings = Settings()

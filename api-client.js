@@ -52,6 +52,13 @@ const APIClient = (() => {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        // Relay password_expired flag for frontend handling
+        if (res.status === 403 && err.detail && err.detail.password_expired) {
+          const e = new Error('password_expired');
+          e.passwordExpired = true;
+          e.username = err.detail.username;
+          throw e;
+        }
         throw new Error(err.detail || '帳號或密碼錯誤');
       }
       const data = await res.json();
@@ -61,6 +68,36 @@ const APIClient = (() => {
 
     logout() {
       sessionStorage.removeItem(TOKEN_KEY);
+    },
+
+    getMe() {
+      return req('/api/auth/me');
+    },
+
+    changePassword(oldPassword, newPassword) {
+      return req('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+      });
+    },
+
+    async changeExpiredPassword(username, oldPassword, newPassword) {
+      const res = await fetch('/api/auth/change-expired-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, old_password: oldPassword, new_password: newPassword }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(
+          Array.isArray(err.detail)
+            ? err.detail.map(d => d.msg).join('; ')
+            : (err.detail || 'HTTP ' + res.status)
+        );
+      }
+      const data = await res.json();
+      sessionStorage.setItem(TOKEN_KEY, data.access_token);
+      return data;
     },
 
     // ─── Dashboard ───────────────────────────────────────────────────────────
@@ -168,6 +205,34 @@ const APIClient = (() => {
 
     deleteIPGroup(id) {
       return req('/api/ipgroups/' + id, { method: 'DELETE' });
+    },
+
+    // ─── User Management (admin only) ────────────────────────────────────────
+
+    getUsers() {
+      return req('/api/users');
+    },
+
+    updateUser(id, data) {
+      return req('/api/users/' + id, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    toggleUserActive(id) {
+      return req('/api/users/' + id + '/activate', { method: 'PATCH' });
+    },
+
+    adminResetPassword(id, newPassword) {
+      return req('/api/users/' + id + '/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ new_password: newPassword }),
+      });
+    },
+
+    deleteUser(id) {
+      return req('/api/users/' + id, { method: 'DELETE' });
     },
   };
 })();

@@ -15,7 +15,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 from database import Base, engine
-from routers import auth, scans, nist, ipgroups, dashboard
+from routers import auth, scans, nist, ipgroups, dashboard, users
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 audit_logger = logging.getLogger("audit")
@@ -91,6 +91,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(users.router)
 app.include_router(scans.router)
 app.include_router(nist.router)
 app.include_router(ipgroups.router)

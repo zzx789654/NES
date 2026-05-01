@@ -1,4 +1,6 @@
 import re
+from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -17,6 +19,7 @@ class UserCreate(BaseModel):
     username: str
     password: str
     role: str = "viewer"
+    password_expires_days: int = 90
 
     @field_validator("username")
     @classmethod
@@ -42,9 +45,63 @@ class UserCreate(BaseModel):
         return v
 
 
+class PasswordChange(BaseModel):
+    old_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def new_password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"[0-9]", v):
+            raise ValueError("Password must contain at least one digit")
+        if not re.search(r"[@$!%*?&_\-#^]", v):
+            raise ValueError("Password must contain at least one special character (@$!%*?&_-#^)")
+        return v
+
+
+class AdminPasswordReset(BaseModel):
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def new_password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"[0-9]", v):
+            raise ValueError("Password must contain at least one digit")
+        if not re.search(r"[@$!%*?&_\-#^]", v):
+            raise ValueError("Password must contain at least one special character")
+        return v
+
+
+class UserUpdate(BaseModel):
+    role: Optional[str] = None
+    password_expires_days: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
 class UserOut(BaseModel):
     id: int
     username: str
     role: str
+
+    model_config = {"from_attributes": True}
+
+
+class UserDetail(BaseModel):
+    id: int
+    username: str
+    role: str
+    is_active: bool
+    created_at: datetime
+    password_changed_at: datetime
+    password_expires_days: int
+    last_login_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
