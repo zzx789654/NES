@@ -39,6 +39,9 @@ sudo ln -sf /etc/nginx/sites-available/secvision /etc/nginx/sites-enabled/secvis
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 
+echo "==> Run database migrations"
+cd "$BACKEND_DIR" && sudo -u secvision /opt/secvision/venv/bin/alembic upgrade head
+
 echo "==> Restart services"
 sudo systemctl daemon-reload
 sudo systemctl restart "$SERVICE_NAME"

@@ -116,9 +116,9 @@ function App() {
   };
 
   useEffect(() => {
-    refreshStats();
+    if (isLoggedIn) refreshStats();
     applyTweaks(TWEAK_DEFAULTS);
-  }, []);
+  }, [isLoggedIn]);
 
   useEffect(() => {
     localStorage.setItem('secvision_page', page);
