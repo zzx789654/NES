@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from database import get_db
+from limiter import limiter
 from models.user import User
 from schemas.auth import Token, TokenData, UserCreate, UserOut
 
@@ -60,7 +61,8 @@ def require_role(*roles: str):
 
 
 @router.post("/token", response_model=Token)
-def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == form.username).first()
     if not user or not verify_password(form.password, user.hashed_pw):
         raise HTTPException(status_code=400, detail="Incorrect username or password")

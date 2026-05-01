@@ -1,10 +1,12 @@
 from datetime import date
+from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import nulls_last
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
+from limiter import limiter
 from models.scan import Scan, Vulnerability
 from routers.auth import get_current_user, require_role
 from schemas.scan import ScanOut, ScanDetail, ScanDiff, HostHistory
@@ -15,10 +17,20 @@ from services.epss_service import fetch_epss_scores
 
 router = APIRouter(prefix="/api/scans", tags=["scans"])
 
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
 
 @router.get("", response_model=list[ScanOut])
-def list_scans(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    return db.query(Scan).order_by(nulls_last(Scan.scan_date.desc()), Scan.uploaded_at.desc()).all()
+def list_scans(
+    page: Optional[int] = Query(None, ge=1, description="Page number (1-based)"),
+    page_size: int = Query(100, ge=1, le=500, description="Results per page (max 500)"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    q = db.query(Scan).order_by(nulls_last(Scan.scan_date.desc()), Scan.uploaded_at.desc())
+    if page is not None:
+        q = q.offset((page - 1) * page_size).limit(page_size)
+    return q.all()
 
 
 @router.get("/diff", response_model=ScanDiff)
@@ -106,7 +118,9 @@ def delete_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(require_r
 
 
 @router.post("/upload", response_model=ScanOut, status_code=201)
+@limiter.limit("5/minute")
 async def upload_scan(
+    request: Request,
     file: UploadFile = File(...),
     name: str = Form(...),
     scan_date: str = Form(None),
@@ -115,6 +129,21 @@ async def upload_scan(
 ):
     content = await file.read()
     filename = file.filename or ""
+
+    # File size guard
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large. Maximum allowed size is 50 MB")
+
+    # Basic content sanity check
+    if filename.endswith(".csv"):
+        if not content or content[:1] not in (b'"', b"'") and not (32 <= content[0] <= 126):
+            raise HTTPException(status_code=400, detail="Invalid CSV content")
+    elif filename.endswith(".json"):
+        stripped = content.lstrip()
+        if not stripped or stripped[:1] not in (b"{", b"["):
+            raise HTTPException(status_code=400, detail="Invalid JSON content")
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file type. Upload .csv or .json")
 
     parsed_date: date | None = None
     if scan_date:
@@ -125,10 +154,8 @@ async def upload_scan(
 
     if filename.endswith(".csv"):
         parsed = parse_nessus_csv(content, name, parsed_date)
-    elif filename.endswith(".json"):
-        parsed = parse_nvd_json(content, name, parsed_date)
     else:
-        raise HTTPException(status_code=400, detail="Unsupported file type. Upload .csv or .json")
+        parsed = parse_nvd_json(content, name, parsed_date)
 
     scan = Scan(
         name=parsed["name"],

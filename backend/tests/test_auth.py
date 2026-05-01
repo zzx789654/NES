@@ -43,7 +43,7 @@ def test_get_me_unauthenticated(client):
 def test_register_by_admin(client, admin_token):
     resp = client.post(
         "/api/auth/register",
-        json={"username": "newuser", "password": "newpass", "role": "viewer"},
+        json={"username": "newuser", "password": "Newpass1!", "role": "viewer"},
         headers=auth(admin_token),
     )
     assert resp.status_code == 201
@@ -56,12 +56,12 @@ def test_register_by_admin(client, admin_token):
 def test_register_duplicate_username(client, admin_token):
     client.post(
         "/api/auth/register",
-        json={"username": "dup", "password": "p", "role": "viewer"},
+        json={"username": "dup", "password": "Duppass1!", "role": "viewer"},
         headers=auth(admin_token),
     )
     resp = client.post(
         "/api/auth/register",
-        json={"username": "dup", "password": "p", "role": "viewer"},
+        json={"username": "dup", "password": "Duppass1!", "role": "viewer"},
         headers=auth(admin_token),
     )
     assert resp.status_code == 409
@@ -70,7 +70,7 @@ def test_register_duplicate_username(client, admin_token):
 def test_register_non_admin_forbidden(client, viewer_token):
     resp = client.post(
         "/api/auth/register",
-        json={"username": "blocked", "password": "p", "role": "viewer"},
+        json={"username": "blocked", "password": "Blocked1!", "role": "viewer"},
         headers=auth(viewer_token),
     )
     assert resp.status_code == 403
@@ -79,7 +79,40 @@ def test_register_non_admin_forbidden(client, viewer_token):
 def test_register_invalid_role(client, admin_token):
     resp = client.post(
         "/api/auth/register",
-        json={"username": "badrole", "password": "p", "role": "superadmin"},
+        json={"username": "badrole", "password": "Badrole1!", "role": "superadmin"},
         headers=auth(admin_token),
     )
     assert resp.status_code == 400
+
+
+def test_register_weak_password_rejected(client, admin_token):
+    """Passwords that don't meet the policy must return 422."""
+    weak_cases = [
+        "short1!",          # too short (7 chars)
+        "alllowercase1!",   # no uppercase
+        "NoDigitHere!",     # no digit
+        "NoSpecial123",     # no special char
+    ]
+    for pw in weak_cases:
+        resp = client.post(
+            "/api/auth/register",
+            json={"username": "testuser", "password": pw, "role": "viewer"},
+            headers=auth(admin_token),
+        )
+        assert resp.status_code == 422, f"Expected 422 for password '{pw}', got {resp.status_code}"
+
+
+def test_register_invalid_username_rejected(client, admin_token):
+    """Usernames with spaces or too short must return 422."""
+    invalid_cases = [
+        "ab",           # too short (2 chars)
+        "user name",    # contains space
+        "user@name",    # invalid char
+    ]
+    for uname in invalid_cases:
+        resp = client.post(
+            "/api/auth/register",
+            json={"username": uname, "password": "Valid1pass!", "role": "viewer"},
+            headers=auth(admin_token),
+        )
+        assert resp.status_code == 422, f"Expected 422 for username '{uname}', got {resp.status_code}"

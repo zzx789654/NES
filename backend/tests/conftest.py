@@ -12,6 +12,9 @@ _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _BACKEND not in sys.path:
     sys.path.insert(0, _BACKEND)
 
+# Disable rate limiting so tests can call /api/auth/token freely
+os.environ.setdefault("TESTING", "true")
+
 # Module-level imports so every fixture shares the exact same objects.
 # Importing `app` triggers model registration on Base.metadata.
 from main import app          # noqa: E402
