@@ -277,6 +277,7 @@ function VulnScanPage({ onStatsChange }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(null);
 
   const loadScans = () => {
     setLoading(true);
@@ -383,6 +384,21 @@ function VulnScanPage({ onStatsChange }) {
       })
       .catch(err => alert(err.message || '上傳失敗'))
       .finally(() => setUploading(false));
+  };
+
+  const handleDeleteScan = (id, name) => {
+    if (!window.confirm(`確定要刪除掃描批次「${name}」？\n此操作將一併刪除所有相關弱點資料，且無法復原。`)) return;
+    setDeleting(id);
+    APIClient.deleteScan(id)
+      .then(() => {
+        if (selectedId === id) setSelectedId(null);
+        if (diffBase === id) setDiffBase(null);
+        if (diffComp === id) setDiffComp(null);
+        loadScans();
+        if (onStatsChange) onStatsChange();
+      })
+      .catch(err => alert(err.message || '刪除失敗'))
+      .finally(() => setDeleting(null));
   };
 
   const selectedScan = scans.find(scan => scan.id === selectedId);
@@ -756,23 +772,24 @@ function VulnScanPage({ onStatsChange }) {
         )}
 
         {tab === 'upload' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-            <Card title="Nessus CSV 上傳">
-              <FileUpload accept=".csv" onFile={handleUpload} label={uploading ? '上傳中…' : 'Nessus CSV (.csv)'} hint="支援 CVSS / EPSS / VPR 欄位" />
-              <div style={{ marginTop: 12, background: 'var(--surface2)', borderRadius: 'var(--r)', padding: '12px', fontSize: 11, color: 'var(--text3)' }}>
-                <div style={{ fontWeight: 600, marginBottom: 6 }}>支援欄位：</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-                  {['Plugin ID', 'CVE', 'Risk', 'Host', 'Port', 'Protocol', 'Name', 'CVSS v3.0 Base Score', 'EPSS Score', 'VPR Score'].map(col => (
-                    <div key={col}><span style={{ color: 'var(--accent)' }}>{col}</span></div>
-                  ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <Card title="Nessus CSV 上傳">
+                <FileUpload accept=".csv" onFile={handleUpload} label={uploading ? '上傳中…' : 'Nessus CSV (.csv)'} hint="支援 CVSS / EPSS / VPR 欄位" />
+                <div style={{ marginTop: 12, background: 'var(--surface2)', borderRadius: 'var(--r)', padding: '12px', fontSize: 11, color: 'var(--text3)' }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>支援欄位：</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                    {['Plugin ID', 'CVE', 'Risk', 'Host', 'Port', 'Protocol', 'Name', 'CVSS v3.0 Base Score', 'EPSS Score', 'VPR Score'].map(col => (
+                      <div key={col}><span style={{ color: 'var(--accent)' }}>{col}</span></div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </Card>
-            <Card title="NVD CVE JSON 上傳">
-              <FileUpload accept=".json" onFile={handleUpload} label={uploading ? '上傳中…' : 'CVE JSON (.json)'} hint="NVD CVE API 2.0 格式" />
-              <div style={{ marginTop: 12, background: 'var(--surface2)', borderRadius: 'var(--r)', padding: '12px', fontSize: 11, color: 'var(--text3)' }}>
-                <div style={{ fontWeight: 600, marginBottom: 6 }}>支援 NVD JSON 結構：</div>
-                <pre style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{`{
+              </Card>
+              <Card title="NVD CVE JSON 上傳">
+                <FileUpload accept=".json" onFile={handleUpload} label={uploading ? '上傳中…' : 'CVE JSON (.json)'} hint="NVD CVE API 2.0 格式" />
+                <div style={{ marginTop: 12, background: 'var(--surface2)', borderRadius: 'var(--r)', padding: '12px', fontSize: 11, color: 'var(--text3)' }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>支援 NVD JSON 結構：</div>
+                  <pre style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{`{
   "vulnerabilities": [
     {
       "cve": {
@@ -783,7 +800,68 @@ function VulnScanPage({ onStatsChange }) {
     }
   ]
 }`}</pre>
-              </div>
+                </div>
+              </Card>
+            </div>
+
+            <Card title={`已上傳掃描批次（共 ${scans.length} 筆）`}>
+              {scans.length === 0 ? (
+                <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text3)', fontSize: 13, fontStyle: 'italic' }}>
+                  尚未上傳任何掃描批次
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--surface2)' }}>
+                        {['#', '批次名稱', '來源類型', '掃描日期', '上傳時間', '弱點數量', '操作'].map(h => (
+                          <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text2)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {scans.map((scan, idx) => (
+                        <tr key={scan.id} style={{ borderBottom: '1px solid var(--border)', background: selectedId === scan.id ? 'oklch(0.3 0.05 195 / 0.15)' : 'transparent' }}>
+                          <td style={{ padding: '9px 12px', color: 'var(--text3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{idx + 1}</td>
+                          <td style={{ padding: '9px 12px', fontWeight: 500, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={scan.name}>
+                            <button
+                              onClick={() => { setSelectedId(scan.id); setTab('history'); }}
+                              style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 600, padding: 0, textAlign: 'left' }}
+                              title="切換至此批次">
+                              {scan.name}
+                            </button>
+                          </td>
+                          <td style={{ padding: '9px 12px' }}>
+                            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: scan.source === 'nessus_csv' ? 'oklch(0.35 0.08 195 / 0.4)' : 'oklch(0.35 0.08 270 / 0.4)', color: scan.source === 'nessus_csv' ? 'var(--accent)' : 'oklch(0.75 0.12 270)', border: `1px solid ${scan.source === 'nessus_csv' ? 'var(--accent)' : 'oklch(0.55 0.12 270)'}` }}>
+                              {scan.source === 'nessus_csv' ? 'Nessus CSV' : 'NVD JSON'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '9px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: scan.scan_date ? 'var(--text)' : 'var(--text3)' }}>
+                            {scan.scan_date || '—'}
+                          </td>
+                          <td style={{ padding: '9px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text2)', whiteSpace: 'nowrap' }}>
+                            {scan.uploaded_at ? scan.uploaded_at.slice(0, 16).replace('T', ' ') : '—'}
+                          </td>
+                          <td style={{ padding: '9px 12px', textAlign: 'right', paddingRight: 20 }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: scan.vuln_count > 0 ? 'var(--text)' : 'var(--text3)' }}>
+                              {scan.vuln_count.toLocaleString()}
+                            </span>
+                          </td>
+                          <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
+                            <Btn
+                              size="sm"
+                              variant="danger"
+                              onClick={() => handleDeleteScan(scan.id, scan.name)}
+                              disabled={deleting === scan.id}>
+                              {deleting === scan.id ? '刪除中…' : '刪除'}
+                            </Btn>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </Card>
           </div>
         )}
