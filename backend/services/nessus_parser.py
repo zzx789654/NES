@@ -179,6 +179,7 @@ def parse_nessus_csv(content: bytes, scan_name: str, scan_date: date | None = No
             "cvss_v2_base": cvss_v2_base,
             "cvss_v2_temporal": cvss_v2_temporal,
             "cvss_v3_base": cvss_v3_base,
+            "cvss": cvss_v3_base,
             "cvss_v3_temporal": cvss_v3_temporal,
             "cvss_v4_base": cvss_v4_base,
             "cvss_v4_threat_score": cvss_v4_threat,

@@ -52,6 +52,7 @@ def parse_nvd_json(content: bytes, scan_name: str, scan_date: date | None = None
             "protocol": None,
             "name": cve_id,
             "cvss": cvss,
+            "cvss_v3_base": cvss,
             "synopsis": description[:300] if description else None,
             "description": description,
             "solution": None,

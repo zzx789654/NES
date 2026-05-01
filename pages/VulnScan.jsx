@@ -1,17 +1,282 @@
-﻿// Vulnerability Scan Page — API-driven scan list and diff
+﻿// Vulnerability Scan Page — API-driven scan list, filters, charts, IP groups, diff, upload
 
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useRef } = React;
 
-function VulnScanPage({ onStatsChange }) {
-  const [scans, setScans] = useState(null);
-  const [selectedId, setSelectedId] = useState(null);
-  const [detail, setDetail] = useState(null);
-  const [diffBase, setDiffBase] = useState(null);
-  const [diffComp, setDiffComp] = useState(null);
-  const [diffData, setDiffData] = useState(null);
-  const [tab, setTab] = useState('list');
+const SEV_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3, Info: 4 };
+const SEV_COLOR = {
+  Critical: 'oklch(0.60 0.22 25)',
+  High: 'oklch(0.68 0.20 45)',
+  Medium: 'oklch(0.76 0.17 72)',
+  Low: 'oklch(0.70 0.14 195)',
+  Info: 'oklch(0.62 0.06 240)',
+};
+
+function QuadrantChart({ vulns, xKey, yKey, xLabel, yLabel, xMid, yMid, xMax, yMax, title, quadrantLabels }) {
+  const ref = useRef(null);
+  const inst = useRef(null);
+
+  const datasets = useMemo(() => {
+    const groups = { Critical: [], High: [], Medium: [], Low: [], Info: [] };
+    vulns.forEach(v => {
+      const x = parseFloat(v[xKey]);
+      const y = parseFloat(v[yKey]);
+      if (isNaN(x) || isNaN(y)) return;
+      const risk = v.risk || 'Info';
+      groups[risk in groups ? risk : 'Info'].push({ x, y, name: v.name, host: v.host, cve: v.cve, id: v.id });
+    });
+    return Object.entries(groups)
+      .filter(([, pts]) => pts.length > 0)
+      .map(([risk, data]) => ({
+        label: risk,
+        data,
+        backgroundColor: SEV_COLOR[risk] + 'cc',
+        borderColor: SEV_COLOR[risk],
+        pointRadius: 6,
+        pointHoverRadius: 9,
+        borderWidth: 1,
+      }));
+  }, [vulns, xKey, yKey]);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    if (inst.current) inst.current.destroy();
+    inst.current = new Chart(ref.current, {
+      type: 'scatter',
+      data: { datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { color: 'var(--text2)', font: { size: 11 }, boxWidth: 10, padding: 12 } },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const pt = ctx.raw;
+                return [
+                  `${pt.name?.slice(0, 50) || '—'}`,
+                  `Host: ${pt.host || '—'}  CVE: ${pt.cve || '—'}`,
+                  `${xLabel}: ${pt.x}  ${yLabel}: ${pt.y}`,
+                ];
+              },
+            },
+            backgroundColor: 'var(--surface)',
+            titleColor: 'var(--text)',
+            bodyColor: 'var(--text2)',
+            borderColor: 'var(--border)',
+            borderWidth: 1,
+            padding: 10,
+          },
+        },
+        scales: {
+          x: { min: 0, max: xMax, title: { display: true, text: xLabel, color: 'var(--text2)', font: { size: 11 } }, ticks: { color: 'var(--text3)', font: { size: 10 } }, grid: { color: 'oklch(0.3 0 0 / 0.2)' } },
+          y: { min: 0, max: yMax, title: { display: true, text: yLabel, color: 'var(--text2)', font: { size: 11 } }, ticks: { color: 'var(--text3)', font: { size: 10 } }, grid: { color: 'oklch(0.3 0 0 / 0.2)' } },
+        },
+      },
+      plugins: [
+        {
+          id: 'quadrantBg',
+          beforeDraw(chart) {
+            const { ctx, chartArea: ca, scales: { x, y } } = chart;
+            if (!ca) return;
+            const mx = x.getPixelForValue(xMid);
+            const my = y.getPixelForValue(yMid);
+            const quads = [
+              { x: ca.left, y: ca.top, w: mx - ca.left, h: my - ca.top, fill: 'oklch(0.76 0.17 72 / 0.07)', label: quadrantLabels[2] },
+              { x: mx, y: ca.top, w: ca.right - mx, h: my - ca.top, fill: 'oklch(0.60 0.22 25 / 0.10)', label: quadrantLabels[0] },
+              { x: ca.left, y: my, w: mx - ca.left, h: ca.bottom - my, fill: 'oklch(0.66 0.15 145 / 0.07)', label: quadrantLabels[3] },
+              { x: mx, y: my, w: ca.right - mx, h: ca.bottom - my, fill: 'oklch(0.68 0.20 45 / 0.08)', label: quadrantLabels[1] },
+            ];
+            quads.forEach(q => {
+              ctx.fillStyle = q.fill;
+              ctx.fillRect(q.x, q.y, q.w, q.h);
+              ctx.fillStyle = 'oklch(0.5 0 0 / 0.5)';
+              ctx.font = 'bold 11px IBM Plex Sans, sans-serif';
+              ctx.textAlign = q.x === ca.left ? 'left' : 'right';
+              ctx.textBaseline = q.y === ca.top ? 'top' : 'bottom';
+              const tx = q.x === ca.left ? q.x + 8 : q.x + q.w - 8;
+              const ty = q.y === ca.top ? q.y + 6 : q.y + q.h - 6;
+              ctx.fillText(q.label, tx, ty);
+            });
+            ctx.save();
+            ctx.strokeStyle = 'oklch(0.5 0 0 / 0.3)';
+            ctx.setLineDash([4, 4]);
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(mx, ca.top);
+            ctx.lineTo(mx, ca.bottom);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(ca.left, my);
+            ctx.lineTo(ca.right, my);
+            ctx.stroke();
+            ctx.restore();
+          },
+        },
+      ],
+    });
+    return () => { if (inst.current) inst.current.destroy(); };
+  }, [datasets, xMid, yMid]);
+
+  const qCounts = useMemo(() => {
+    const c = [0, 0, 0, 0];
+    vulns.forEach(v => {
+      const x = parseFloat(v[xKey]);
+      const y = parseFloat(v[yKey]);
+      if (isNaN(x) || isNaN(y)) return;
+      if (x >= xMid && y >= yMid) c[0]++;
+      else if (x >= xMid && y < yMid) c[1]++;
+      else if (x < xMid && y >= yMid) c[2]++;
+      else c[3]++;
+    });
+    return c;
+  }, [vulns, xKey, yKey, xMid, yMid]);
+
+  const qColors = ['var(--critical)', 'var(--high)', 'var(--warning)', 'var(--success)'];
+
+  return (
+    <Card title={title}>
+      <div style={{ position: 'relative', height: 320 }}>
+        <canvas ref={ref}></canvas>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 12 }}>
+        {quadrantLabels.map((lbl, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: 'var(--surface2)', borderRadius: 'var(--rsm)' }}>
+            <span style={{ fontSize: 11, color: 'var(--text2)' }}>{lbl}</span>
+            <span style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: qColors[i], fontSize: 14 }}>{qCounts[i]}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function IPGroupManager({ allHosts, selectedIPs, onSelectIPs }) {
+  const [groups, setGroups] = useState([]);
+  const [newGroupName, setNewGroupName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+
+  const loadGroups = () => {
+    setLoading(true);
+    return APIClient.getIPGroups()
+      .then(data => {
+        setGroups(data);
+        setError('');
+        setLoading(false);
+      })
+      .catch(err => {
+        setError(err.message || '無法載入 IP 群組');
+        setGroups([]);
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => { loadGroups(); }, []);
+
+  const saveGroup = () => {
+    const name = newGroupName.trim();
+    if (!name || selectedIPs.length === 0) return;
+    APIClient.createIPGroup(name, selectedIPs)
+      .then(() => {
+        setNewGroupName('');
+        loadGroups();
+      })
+      .catch(err => alert(err.message || '無法儲存 IP 群組'));
+  };
+
+  const deleteGroup = id => {
+    APIClient.deleteIPGroup(id)
+      .then(() => loadGroups())
+      .catch(err => alert(err.message || '無法刪除 IP 群組'));
+  };
+
+  const toggleIP = ip => onSelectIPs(prev =>
+    prev.includes(ip) ? prev.filter(x => x !== ip) : [...prev, ip]
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10 }}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '12px' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 8 }}>
+            IP 篩選 / 選擇主機（{selectedIPs.length} 已選）
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 120, overflow: 'auto' }}>
+            {allHosts.length === 0 ? (
+              <div style={{ color: 'var(--text3)', fontSize: 12 }}>此掃描尚無主機資料</div>
+            ) : allHosts.map(host => {
+              const sel = selectedIPs.includes(host);
+              return (
+                <button key={host} onClick={() => toggleIP(host)}
+                  style={{ padding: '5px 10px', borderRadius: 999, fontSize: 12, fontFamily: 'var(--font-mono)', cursor: 'pointer', border: `1px solid ${sel ? 'var(--accent)' : 'var(--border)'}`, background: sel ? 'var(--accent-bg)' : 'var(--surface2)', color: sel ? 'var(--accent)' : 'var(--text2)', transition: 'all 0.12s', fontWeight: sel ? 700 : 400 }}>
+                  {host}
+                </button>
+              );
+            })}
+          </div>
+          {selectedIPs.length > 0 && (
+            <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button onClick={() => onSelectIPs([])} style={{ fontSize: 11, color: 'var(--text3)', cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline' }}>清除全部</button>
+              <button onClick={() => onSelectIPs(allHosts)} style={{ fontSize: 11, color: 'var(--text3)', cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline' }}>全選</button>
+            </div>
+          )}
+        </div>
+
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '12px', minWidth: 260 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 8 }}>儲存 IP 群組</div>
+          <div style={{ display: 'flex', gap: 8, flexDirection: 'column' }}>
+            <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="群組名稱…"
+              style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--rsm)', padding: '8px 10px', fontSize: 13, color: 'var(--text)' }}
+              onKeyDown={e => e.key === 'Enter' && saveGroup()} />
+            <Btn size="sm" variant="secondary" onClick={saveGroup} disabled={!newGroupName.trim() || selectedIPs.length === 0}>💾 儲存群組</Btn>
+          </div>
+          {error && <div style={{ marginTop: 10, color: 'var(--critical)', fontSize: 12 }}>{error}</div>}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>已儲存群組：</span>
+        {loading ? (
+          <span style={{ fontSize: 12, color: 'var(--text3)' }}>載入中…</span>
+        ) : groups.length === 0 ? (
+          <span style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>尚無群組</span>
+        ) : groups.map(group => (
+          <div key={group.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 0, borderRadius: 999, border: '1px solid var(--border)', overflow: 'hidden', background: 'var(--surface2)' }}>
+            <button onClick={() => onSelectIPs(group.ips)}
+              style={{ padding: '4px 10px', fontSize: 12, fontWeight: 500, cursor: 'pointer', background: 'none', border: 'none', color: 'var(--text)' }}
+              title={group.ips.join(', ')}>
+              {group.name} <span style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>({group.ips.length})</span>
+            </button>
+            <button onClick={() => deleteGroup(group.id)}
+              style={{ padding: '4px 8px', fontSize: 13, cursor: 'pointer', background: 'none', border: 'none', color: 'var(--text3)', borderLeft: '1px solid var(--border)' }}
+              title="刪除群組">×</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function VulnScanPage({ onStatsChange }) {
+  const [tab, setTab] = useState('history');
+  const [scans, setScans] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [diffData, setDiffData] = useState(null);
+  const [diffBase, setDiffBase] = useState(null);
+  const [diffComp, setDiffComp] = useState(null);
+  const [selectedIPs, setSelectedIPs] = useState([]);
+  const [historyHost, setHistoryHost] = useState('');
+  const [hostHistory, setHostHistory] = useState(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [search, setSearch] = useState('');
+  const [sevFilter, setSevFilter] = useState('all');
+  const [visibleCols, setVisibleCols] = useState(['risk', 'host', 'port', 'plugin_id', 'name', 'cve', 'cvss_v3_base', 'epss', 'vpr']);
+  const [expandedRow, setExpandedRow] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   const loadScans = () => {
     setLoading(true);
@@ -20,7 +285,13 @@ function VulnScanPage({ onStatsChange }) {
         setScans(list);
         setError('');
         setLoading(false);
-        if (!selectedId && list.length > 0) setSelectedId(list[0].id);
+        if (!selectedId && list.length > 0) {
+          setSelectedId(list[0].id);
+        }
+        if (list.length > 1 && diffBase === null && diffComp === null) {
+          setDiffBase(list[0].id);
+          setDiffComp(list[1].id);
+        }
       })
       .catch(err => {
         setError(err.message || '無法載入掃描清單');
@@ -29,31 +300,78 @@ function VulnScanPage({ onStatsChange }) {
       });
   };
 
+  const loadScanDetail = id => {
+    if (!id) return;
+    APIClient.getScanDetail(id)
+      .then(data => {
+        setDetail(data);
+        setError('');
+      })
+      .catch(err => setError(err.message || '無法載入掃描明細'));
+  };
+
+  const loadDiff = (baseId, compId) => {
+    if (!baseId || !compId || baseId === compId) {
+      setDiffData(null);
+      return;
+    }
+    APIClient.getScanDiff(baseId, compId)
+      .then(data => {
+        setDiffData(data);
+        setError('');
+      })
+      .catch(err => setError(err.message || '無法載入掃描差異'));
+  };
+
+  const loadHostHistory = host => {
+    if (!host) {
+      setHostHistory(null);
+      return;
+    }
+    setHistoryLoading(true);
+    setHistoryError('');
+    APIClient.getHostHistory(host)
+      .then(data => {
+        setHostHistory(data);
+      })
+      .catch(err => {
+        setHostHistory(null);
+        setHistoryError(err.message || '無法載入主機歷程');
+      })
+      .finally(() => setHistoryLoading(false));
+  };
+
   useEffect(() => {
     loadScans();
   }, []);
 
   useEffect(() => {
-    if (!selectedId) {
+    if (selectedId) {
+      loadScanDetail(selectedId);
+    } else {
       setDetail(null);
-      return;
     }
-    APIClient.getScanDetail(selectedId)
-      .then(data => setDetail(data))
-      .catch(err => setError(err.message || '無法載入掃描明細'));
   }, [selectedId]);
 
   useEffect(() => {
-    if (!diffBase || !diffComp || diffBase === diffComp) {
-      setDiffData(null);
-      return;
+    if (allHosts.length > 0 && !historyHost) {
+      setHistoryHost(allHosts[0]);
     }
-    APIClient.getScanDiff(diffBase, diffComp)
-      .then(setDiffData)
-      .catch(err => setError(err.message || '無法載入掃描差異'));
+    if (historyHost && allHosts.length > 0 && !allHosts.includes(historyHost)) {
+      setHistoryHost(allHosts[0]);
+    }
+  }, [allHosts, historyHost]);
+
+  useEffect(() => {
+    loadHostHistory(historyHost);
+  }, [historyHost]);
+
+  useEffect(() => {
+    loadDiff(diffBase, diffComp);
   }, [diffBase, diffComp]);
 
   const handleUpload = (fileName, content) => {
+    setUploading(true);
     const blob = new Blob([content]);
     const file = new File([blob], fileName, { type: 'application/octet-stream' });
     APIClient.uploadScan(file, fileName)
@@ -63,133 +381,409 @@ function VulnScanPage({ onStatsChange }) {
         if (onStatsChange) onStatsChange();
         alert('✅ 掃描上傳完成');
       })
-      .catch(err => alert(err.message || '上傳失敗'));
+      .catch(err => alert(err.message || '上傳失敗'))
+      .finally(() => setUploading(false));
   };
+
+  const selectedScan = scans.find(scan => scan.id === selectedId);
+  const vulnRows = detail?.vulnerabilities || [];
+  const allHosts = useMemo(() => [...new Set(vulnRows.map(v => v.host).filter(Boolean))], [vulnRows]);
+
+  const activeVulns = useMemo(() => {
+    if (selectedIPs.length === 0) return vulnRows;
+    return vulnRows.filter(v => selectedIPs.includes(v.host));
+  }, [vulnRows, selectedIPs]);
+
+  const filteredVulns = useMemo(() => {
+    return activeVulns
+      .filter(v => sevFilter === 'all' || v.risk === sevFilter)
+      .filter(v => {
+        if (!search) return true;
+        const term = search.toLowerCase();
+        return [v.host, v.name, v.plugin_id, v.cve]
+          .filter(Boolean)
+          .some(field => String(field).toLowerCase().includes(term));
+      })
+      .sort((a, b) => (SEV_ORDER[a.risk] ?? 99) - (SEV_ORDER[b.risk] ?? 99));
+  }, [activeVulns, search, sevFilter]);
+
+  const diffRows = useMemo(() => {
+    if (!diffData) return [];
+    return [
+      ...diffData.new.map(item => ({ ...item, status: 'new' })),
+      ...diffData.resolved.map(item => ({ ...item, status: 'resolved' })),
+      ...diffData.persistent.map(item => ({ ...item, status: 'persistent' })),
+    ];
+  }, [diffData]);
+
+  const [diffFilter, setDiffFilter] = useState('all');
+  const filteredDiff = useMemo(() => {
+    return diffRows
+      .filter(row => diffFilter === 'all' || row.status === diffFilter)
+      .filter(row => {
+        if (!search) return true;
+        const term = search.toLowerCase();
+        return [row.host, row.name, row.plugin_id, row.cve]
+          .filter(Boolean)
+          .some(field => String(field).toLowerCase().includes(term));
+      })
+      .filter(row => selectedIPs.length === 0 || selectedIPs.includes(row.host));
+  }, [diffRows, diffFilter, search, selectedIPs]);
+
+  const diffCounts = useMemo(() => ({
+    all: diffRows.length,
+    new: diffRows.filter(d => d.status === 'new').length,
+    resolved: diffRows.filter(d => d.status === 'resolved').length,
+    persistent: diffRows.filter(d => d.status === 'persistent').length,
+  }), [diffRows]);
+
+  const ALL_COLS = [
+    { key: 'risk', label: '嚴重等級' },
+    { key: 'host', label: '主機' },
+    { key: 'port', label: 'Port' },
+    { key: 'plugin_id', label: 'Plugin ID' },
+    { key: 'name', label: '弱點名稱' },
+    { key: 'cve', label: 'CVE' },
+    { key: 'cvss_v3_base', label: 'CVSS' },
+    { key: 'epss', label: 'EPSS' },
+    { key: 'vpr', label: 'VPR' },
+    { key: 'synopsis', label: '摘要' },
+    { key: 'solution', label: '修補建議' },
+  ];
+
+  const columns = ALL_COLS.filter(c => visibleCols.includes(c.key)).map(c => ({
+    ...c,
+    sortable: true,
+    mono: ['host', 'port', 'plugin_id', 'cve', 'cvss_v3_base', 'epss', 'vpr'].includes(c.key),
+    render: c.key === 'risk' ? v => <SeverityBadge level={v || 'Info'} />
+      : c.key === 'epss' ? v => v != null ? <span style={{ color: parseFloat(v) >= 0.1 ? 'var(--critical)' : parseFloat(v) >= 0.01 ? 'var(--warning)' : 'var(--text2)', fontWeight: parseFloat(v) >= 0.1 ? 700 : 400 }}>{parseFloat(v).toFixed(3)}</span> : <span style={{ color: 'var(--text3)' }}>—</span>
+      : c.key === 'vpr' ? v => v != null ? <span style={{ color: parseFloat(v) >= 7 ? 'var(--critical)' : parseFloat(v) >= 4 ? 'var(--warning)' : 'var(--text2)', fontWeight: parseFloat(v) >= 7 ? 700 : 400 }}>{parseFloat(v).toFixed(1)}</span> : <span style={{ color: 'var(--text3)' }}>—</span>
+      : c.key === 'cvss_v3_base' ? v => v != null ? <span style={{ color: 'var(--text2)', fontFamily: 'var(--font-mono)' }}>{parseFloat(v).toFixed(1)}</span> : <span style={{ color: 'var(--text3)' }}>—</span>
+      : c.key === 'name' ? v => <span title={v} style={{ fontWeight: 500 }}>{v?.length > 60 ? v.slice(0, 58) + '…' : v}</span>
+      : undefined,
+  }));
+
+  const epssVulns = useMemo(() => activeVulns.filter(v => v.epss != null && v.cvss_v3_base != null && parseFloat(v.cvss_v3_base) > 0), [activeVulns]);
+  const vprVulns = useMemo(() => activeVulns.filter(v => v.vpr != null && v.cvss_v3_base != null && parseFloat(v.cvss_v3_base) > 0), [activeVulns]);
 
   if (loading) {
     return <div style={{ padding: 40, color: 'var(--text2)' }}>載入中…</div>;
   }
 
-  const selectedScan = scans?.find(s => s.id === selectedId);
-  const vulnRows = detail?.vulnerabilities || [];
-
   return (
     <div>
       <PageHeader
         title="Vulnerability Scan"
-        subtitle="使用真實 API 檢視掃描紀錄、弱點明細與差異比較"
-        actions={<FileUpload onFile={handleUpload} label="上傳掃描結果" hint="支援 Nessus .csv 或 .json" />}
+        subtitle="使用真實 API 操作掃描清單、弱點明細、差異比對、EPSS/VPR 風險矩陣與 IP 群組"
+        actions={
+          <FileUpload
+            accept=".csv,.json"
+            onFile={handleUpload}
+            label={uploading ? '上傳中…' : '上傳弱點掃描'}
+            hint="支援 Nessus CSV 或 NVD CVE JSON"
+          />
+        }
       />
 
       {error && <div style={{ marginBottom: 18, color: 'var(--critical)' }}>{error}</div>}
 
       <Tabs
         active={tab}
-        onChange={t => { setTab(t); setError(''); }}
+        onChange={t => { setTab(t); setError(''); setSearch(''); setSevFilter('all'); }}
         tabs={[
-          { id: 'list', label: '掃描清單', icon: '📋', count: scans?.length ?? 0 },
-          { id: 'diff', label: 'Diff 比較', icon: '⇄', count: diffData ? (diffData.new.length + diffData.resolved.length + diffData.persistent.length) : 0 },
+          { id: 'history', label: '掃描結果', icon: '📋', count: selectedScan?.vuln_count ?? 0 },
+          { id: 'matrix', label: '風險矩陣', icon: '⊞' },
+          { id: 'diff', label: 'Diff 比較', icon: '⇄', count: diffCounts.new || 0 },
+          { id: 'upload', label: '上傳管理', icon: '📂' },
         ]}
       />
 
-      {tab === 'list' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.8fr', gap: 16, marginTop: 16 }}>
-          <Card title="掃描列表">
-            {scans.length === 0 ? (
-              <div style={{ color: 'var(--text3)' }}>尚無掃描資料</div>
-            ) : (
-              <div style={{ display: 'grid', gap: 10 }}>
-                {scans.map(scan => (
-                  <button key={scan.id} onClick={() => setSelectedId(scan.id)}
-                    style={{ width: '100%', textAlign: 'left', padding: '12px 14px', borderRadius: 'var(--rsm)', background: selectedId === scan.id ? 'var(--accent-bg)' : 'var(--surface2)', color: selectedId === scan.id ? 'var(--accent)' : 'var(--text)', border: '1px solid var(--border)', cursor: 'pointer' }}>
-                    <div style={{ fontWeight: 600 }}>{scan.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>{scan.uploaded_at.slice(0, 10)} · {scan.vuln_count} 筆弱點</div>
-                  </button>
+      <div style={{ paddingTop: 16 }}>
+        {['history', 'matrix', 'diff'].includes(tab) && (
+          <div style={{ marginBottom: 16 }}>
+            <IPGroupManager allHosts={allHosts} selectedIPs={selectedIPs} onSelectIPs={setSelectedIPs} />
+          </div>
+        )}
+
+        {tab === 'history' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <select value={selectedId || ''} onChange={e => setSelectedId(Number(e.target.value) || null)}
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 'var(--rsm)', padding: '7px 10px', fontSize: 13 }}>
+                {scans.map(scan => <option key={scan.id} value={scan.id}>{scan.name} · {scan.uploaded_at.slice(0, 10)} · {scan.vuln_count} 筆</option>)}
+              </select>
+              <select value={sevFilter} onChange={e => setSevFilter(e.target.value)}
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 'var(--rsm)', padding: '7px 10px', fontSize: 13 }}>
+                <option value="all">全部等級</option>
+                {['Critical', 'High', 'Medium', 'Low', 'Info'].map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <SearchBar value={search} onChange={setSearch} placeholder="搜尋 IP / 弱點名稱 / CVE…" />
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text2)', fontFamily: 'var(--font-mono)' }}>
+                {filteredVulns.length} 筆{selectedIPs.length > 0 ? ` · ${selectedIPs.length} IP 篩選中` : ''}
+              </span>
+            </div>
+
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '12px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 8 }}>顯示欄位</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                {ALL_COLS.map(col => (
+                  <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer', padding: '4px 10px', borderRadius: 99, background: visibleCols.includes(col.key) ? 'var(--accent-bg)' : 'var(--surface2)', color: visibleCols.includes(col.key) ? 'var(--accent)' : 'var(--text3)' }}>
+                    <input type="checkbox" checked={visibleCols.includes(col.key)} onChange={e => setVisibleCols(prev => e.target.checked ? [...prev, col.key] : prev.filter(k => k !== col.key))} style={{ accentColor: 'var(--accent)', width: 12, height: 12 }} />
+                    {col.label}
+                  </label>
                 ))}
               </div>
-            )}
-          </Card>
+            </div>
 
-          <Card title="掃描明細">
-            {!detail ? (
-              <div style={{ color: 'var(--text3)' }}>請選擇一筆掃描以檢視弱點明細</div>
-            ) : (
-              <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginBottom: 16 }}>
-                  <div style={{ background: 'var(--surface2)', borderRadius: 'var(--rsm)', padding: 12 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>掃描名稱</div>
-                    <div style={{ marginTop: 6, fontWeight: 600 }}>{detail.name}</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {['Critical', 'High', 'Medium', 'Low', 'Info'].map(sev => {
+                const cnt = activeVulns.filter(v => v.risk === sev).length;
+                const colors = { Critical: 'var(--critical)', High: 'var(--high)', Medium: 'var(--medium)', Low: 'var(--low)', Info: 'var(--info)' };
+                const bgs = { Critical: 'var(--critical-bg)', High: 'var(--high-bg)', Medium: 'var(--medium-bg)', Low: 'var(--low-bg)', Info: 'var(--info-bg)' };
+                return (
+                  <div key={sev} onClick={() => setSevFilter(sevFilter === sev ? 'all' : sev)}
+                    style={{ flex: 1, minWidth: 120, background: sevFilter === sev ? bgs[sev] : 'var(--surface)', border: `1px solid ${sevFilter === sev ? colors[sev] : 'var(--border)'}`, borderRadius: 'var(--r)', padding: '12px 14px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.15s' }}>
+                    <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)', color: colors[sev] }}>{cnt}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>{sev}</div>
                   </div>
-                  <div style={{ background: 'var(--surface2)', borderRadius: 'var(--rsm)', padding: 12 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>弱點數</div>
-                    <div style={{ marginTop: 6, fontWeight: 600 }}>{detail.vuln_count}</div>
+                );
+              })}
+            </div>
+
+            <Card title="主機歷程" action={hostHistory?.history?.length ? <span style={{ fontSize: 11, color: 'var(--text3)' }}>{hostHistory.history.length} 次掃描紀錄</span> : null}>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ minWidth: 220 }}>
+                  <select value={historyHost} onChange={e => setHistoryHost(e.target.value)}
+                    style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 'var(--rsm)', padding: '8px 10px', fontSize: 13 }}>
+                    <option value="">選擇主機以查看歷程</option>
+                    {allHosts.map(host => <option key={host} value={host}>{host}</option>)}
+                  </select>
+                </div>
+                {hostHistory && !historyLoading && (
+                  <div style={{ fontSize: 12, color: 'var(--text2)' }}>
+                    首次出現：{hostHistory.first_seen ? hostHistory.first_seen.slice(0, 10) : '—'}
+                    <br />
+                    最近出現：{hostHistory.last_seen ? hostHistory.last_seen.slice(0, 10) : '—'}
+                  </div>
+                )}
+              </div>
+              {historyLoading ? (
+                <div style={{ color: 'var(--text2)' }}>載入主機歷程…</div>
+              ) : historyError ? (
+                <div style={{ color: 'var(--critical)' }}>{historyError}</div>
+              ) : hostHistory?.history?.length ? (
+                <Timeline items={hostHistory.history.map(item => ({
+                  type: 'scan',
+                  text: `${item.scan_name} · ${item.vuln_count} 筆弱點`,
+                  date: item.scan_date ? item.scan_date : item.uploaded_at.slice(0, 10),
+                }))} />
+              ) : (
+                <div style={{ color: 'var(--text3)', fontSize: 12 }}>目前尚無主機歷程資料，請選擇有漏洞紀錄的主機。</div>
+              )}
+            </Card>
+
+            <Card noPad>
+              <DataTable columns={columns} rows={filteredVulns} maxHeight={520} onRowClick={row => setExpandedRow(expandedRow?.id === row.id ? null : row)} />
+            </Card>
+
+            {expandedRow && (
+              <Card title={`弱點詳情 — ${expandedRow.name}`} action={<Btn size="sm" variant="ghost" onClick={() => setExpandedRow(null)}>關閉 ×</Btn>}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  <div>
+                    <SectionDivider label="基本資訊" />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {[
+                        ['主機 IP', expandedRow.host],
+                        ['連接埠', `${expandedRow.port || '-'} / ${expandedRow.protocol || '-'}`],
+                        ['Plugin ID', expandedRow.plugin_id],
+                        ['CVE', expandedRow.cve || '—'],
+                        ['CVSS', expandedRow.cvss_v3_base != null ? parseFloat(expandedRow.cvss_v3_base).toFixed(1) : '—'],
+                        ['EPSS', expandedRow.epss != null ? parseFloat(expandedRow.epss).toFixed(3) : '—'],
+                        ['VPR', expandedRow.vpr != null ? parseFloat(expandedRow.vpr).toFixed(1) : '—'],
+                      ].map(([key, value]) => (
+                        <div key={key} style={{ display: 'flex', gap: 8 }}>
+                          <span style={{ width: 90, fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>{key}</span>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text)' }}>{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <SectionDivider label="摘要" />
+                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>{expandedRow.synopsis || '—'}</p>
+                    <SectionDivider label="修補建議" />
+                    <p style={{ fontSize: 13, lineHeight: 1.6 }}>{expandedRow.solution || '—'}</p>
+                  </div>
+                  <div>
+                    <SectionDivider label="說明" />
+                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>{expandedRow.description || '—'}</p>
+                    <SectionDivider label="Plugin Output" />
+                    <pre style={{ fontSize: 11, fontFamily: 'var(--font-mono)', background: 'var(--surface2)', padding: '10px 12px', borderRadius: 'var(--rsm)', overflow: 'auto', maxHeight: 150, color: 'var(--accent)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{expandedRow.plugin_output || '—'}</pre>
                   </div>
                 </div>
-                <DataTable
-                  columns={[
-                    { key: 'risk', label: '嚴重等級', render: v => <SeverityBadge level={v || 'Info'} /> },
-                    { key: 'host', label: '主機' },
-                    { key: 'plugin_id', label: 'Plugin ID', mono: true },
-                    { key: 'cve', label: 'CVE', mono: true },
-                    { key: 'cvss_v3_base', label: 'CVSS' },
-                    { key: 'epss', label: 'EPSS' },
-                    { key: 'vpr', label: 'VPR' },
-                    { key: 'name', label: '弱點名稱' },
-                  ]}
-                  rows={vulnRows}
-                  emptyText="無弱點資料"
-                />
-              </>
+              </Card>
             )}
-          </Card>
-        </div>
-      )}
+          </div>
+        )}
 
-      {tab === 'diff' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
-          <Card title="Diff 設定">
-            <div style={{ display: 'grid', gap: 12 }}>
-              <FormField label="基準掃描">
-                <FormSelect value={diffBase || ''} onChange={e => setDiffBase(Number(e.target.value) || null)}>
+        {tab === 'matrix' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r)', fontSize: 12, color: 'var(--text2)', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+              <span>📊 <strong style={{ color: 'var(--text)' }}>EPSS</strong> — 漏洞在 30 天內被利用的機率</span>
+              <span>📊 <strong style={{ color: 'var(--text)' }}>VPR</strong> — Tenable 的漏洞優先度評分</span>
+              {selectedIPs.length > 0 && <span style={{ color: 'var(--accent)', fontWeight: 600 }}>已篩選 IP：{selectedIPs.join(', ')}</span>}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <QuadrantChart
+                vulns={epssVulns}
+                xKey="cvss_v3_base"
+                yKey="epss"
+                xLabel="CVSS"
+                yLabel="EPSS"
+                xMid={7}
+                yMid={0.1}
+                xMax={10}
+                yMax={1}
+                title={`EPSS vs CVSS 風險矩陣 (${epssVulns.length} 筆)`}
+                quadrantLabels={['🔴 優先修補', '🟠 計劃修補', '🟡 監控利用', '🟢 低優先']}
+              />
+              <QuadrantChart
+                vulns={vprVulns}
+                xKey="cvss_v3_base"
+                yKey="vpr"
+                xLabel="CVSS"
+                yLabel="VPR"
+                xMid={7}
+                yMid={7}
+                xMax={10}
+                yMax={10}
+                title={`VPR vs CVSS 風險矩陣 (${vprVulns.length} 筆)`}
+                quadrantLabels={['🔴 優先修補', '🟠 計劃修補', '🟡 監控利用', '🟢 低優先']}
+              />
+            </div>
+
+            <Card title="優先修補清單 — CVSS ≥ 7 且 EPSS ≥ 0.1">
+              <DataTable compact maxHeight={280}
+                rows={activeVulns.filter(v => parseFloat(v.cvss_v3_base || 0) >= 7 && parseFloat(v.epss || 0) >= 0.1).sort((a, b) => parseFloat(b.epss || 0) - parseFloat(a.epss || 0))}
+                columns={[
+                  { key: 'risk', label: '等級', sortable: true, render: v => <SeverityBadge level={v || 'Info'} /> },
+                  { key: 'epss', label: 'EPSS', sortable: true, mono: true, render: v => <span style={{ color: 'var(--critical)', fontWeight: 700 }}>{parseFloat(v).toFixed(3)}</span> },
+                  { key: 'vpr', label: 'VPR', sortable: true, mono: true, render: v => <span style={{ color: parseFloat(v) >= 7 ? 'var(--critical)' : 'var(--warning)', fontWeight: 700 }}>{parseFloat(v).toFixed(1)}</span> },
+                  { key: 'cvss_v3_base', label: 'CVSS', sortable: true, mono: true },
+                  { key: 'host', label: '主機', sortable: true, mono: true },
+                  { key: 'name', label: '弱點名稱', render: v => <span title={v}>{v?.length > 55 ? v.slice(0, 53) + '…' : v}</span> },
+                  { key: 'cve', label: 'CVE', mono: true },
+                ]} />
+            </Card>
+          </div>
+        )}
+
+        {tab === 'diff' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>基準</span>
+                <select value={diffBase || ''} onChange={e => setDiffBase(Number(e.target.value) || null)}
+                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 'var(--rsm)', padding: '7px 10px', fontSize: 13 }}>
                   <option value="">選擇基準掃描</option>
                   {scans.map(scan => <option key={scan.id} value={scan.id}>{scan.name}</option>)}
-                </FormSelect>
-              </FormField>
-              <FormField label="比較掃描">
-                <FormSelect value={diffComp || ''} onChange={e => setDiffComp(Number(e.target.value) || null)}>
+                </select>
+              </div>
+              <span style={{ fontSize: 18, color: 'var(--text3)' }}>→</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>比對</span>
+                <select value={diffComp || ''} onChange={e => setDiffComp(Number(e.target.value) || null)}
+                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 'var(--rsm)', padding: '7px 10px', fontSize: 13 }}>
                   <option value="">選擇比較掃描</option>
                   {scans.map(scan => <option key={scan.id} value={scan.id}>{scan.name}</option>)}
-                </FormSelect>
-              </FormField>
-            </div>
-          </Card>
-
-          <Card title="Diff 結果">
-            {!diffData ? (
-              <div style={{ color: 'var(--text3)' }}>請選擇兩筆不同掃描進行比較</div>
-            ) : (
-              <div style={{ display: 'grid', gap: 12 }}>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <StatCard label="新增弱點" value={diffData.new.length} color="var(--critical)" />
-                  <StatCard label="已解決" value={diffData.resolved.length} color="var(--success)" />
-                  <StatCard label="持續弱點" value={diffData.persistent.length} color="var(--warning)" />
-                </div>
-                <DataTable
-                  columns={[
-                    { key: 'risk', label: '等級', render: v => <SeverityBadge level={v || 'Info'} /> },
-                    { key: 'host', label: '主機' },
-                    { key: 'cve', label: 'CVE', mono: true },
-                    { key: 'name', label: '弱點名稱' },
-                    { key: 'status', label: '狀態' },
-                  ]}
-                  rows={[...diffData.new, ...diffData.resolved, ...diffData.persistent].map(item => ({ ...item, status: item.status }))}
-                  emptyText="無差異資料"
-                />
+                </select>
               </div>
-            )}
-          </Card>
-        </div>
-      )}
+              <SearchBar value={search} onChange={setSearch} placeholder="搜尋 IP / 弱點名稱 / CVE…" />
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {[
+                ['all', '全部', diffCounts.all, 'var(--text)'],
+                ['new', '新增', diffCounts.new, 'var(--critical)'],
+                ['resolved', '已解決', diffCounts.resolved, 'var(--success)'],
+                ['persistent', '持續', diffCounts.persistent, 'var(--text2)'],
+              ].map(([value, label, cnt, color]) => (
+                <div key={value} onClick={() => setDiffFilter(value)}
+                  style={{ flex: 1, minWidth: 120, background: 'var(--surface)', border: `1px solid ${diffFilter === value ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 'var(--r)', padding: '12px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.15s' }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)', color }}>{cnt || 0}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>{label}</div>
+                </div>
+              ))}
+            </div>
+            <Card noPad>
+              <div style={{ overflow: 'auto', maxHeight: 520 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--surface2)' }}>
+                      {['狀態', '等級', 'IP', 'Port', 'Plugin ID', '弱點名稱', 'CVSS', 'EPSS', 'VPR', 'CVE'].map(h => (
+                        <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text2)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap', position: 'sticky', top: 0, background: 'var(--surface2)' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredDiff.length === 0 ? (
+                      <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: 'var(--text3)', fontStyle: 'italic' }}>無符合條件的記錄</td></tr>
+                    ) : filteredDiff.map((row, index) => {
+                      const bg = row.status === 'new' ? 'var(--diff-new)' : row.status === 'resolved' ? 'var(--diff-resolved)' : 'transparent';
+                      const label = row.status === 'new' ? '🔴 新增' : row.status === 'resolved' ? '🟢 已解決' : '🔵 持續';
+                      return (
+                        <tr key={`${row.id}-${index}`} style={{ borderBottom: '1px solid var(--border)', background: bg }}>
+                          <td style={{ padding: '10px 12px', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}>{label}</td>
+                          <td style={{ padding: '10px 12px' }}><SeverityBadge level={row.risk || 'Info'} /></td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{row.host || '—'}</td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{row.port || '—'}</td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{row.plugin_id || '—'}</td>
+                          <td style={{ padding: '10px 12px', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.name}>{row.name || '—'}</td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{row.cvss_v3_base != null ? parseFloat(row.cvss_v3_base).toFixed(1) : '—'}</td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: row.epss != null && parseFloat(row.epss) >= 0.1 ? 'var(--critical)' : 'var(--text2)', fontWeight: row.epss != null && parseFloat(row.epss) >= 0.1 ? 700 : 400 }>{row.epss != null ? parseFloat(row.epss).toFixed(3) : '—'}</td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: row.vpr != null && parseFloat(row.vpr) >= 7 ? 'var(--critical)' : 'var(--text2)', fontWeight: row.vpr != null && parseFloat(row.vpr) >= 7 ? 700 : 400 }>{row.vpr != null ? parseFloat(row.vpr).toFixed(1) : '—'}</td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text2)' }}>{row.cve || '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {tab === 'upload' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <Card title="Nessus CSV 上傳">
+              <FileUpload accept=".csv" onFile={handleUpload} label={uploading ? '上傳中…' : 'Nessus CSV (.csv)'} hint="支援 CVSS / EPSS / VPR 欄位" />
+              <div style={{ marginTop: 12, background: 'var(--surface2)', borderRadius: 'var(--r)', padding: '12px', fontSize: 11, color: 'var(--text3)' }}>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>支援欄位：</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                  {['Plugin ID', 'CVE', 'Risk', 'Host', 'Port', 'Protocol', 'Name', 'CVSS v3.0 Base Score', 'EPSS Score', 'VPR Score'].map(col => (
+                    <div key={col}><span style={{ color: 'var(--accent)' }}>{col}</span></div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+            <Card title="NVD CVE JSON 上傳">
+              <FileUpload accept=".json" onFile={handleUpload} label={uploading ? '上傳中…' : 'CVE JSON (.json)'} hint="NVD CVE API 2.0 格式" />
+              <div style={{ marginTop: 12, background: 'var(--surface2)', borderRadius: 'var(--r)', padding: '12px', fontSize: 11, color: 'var(--text3)' }}>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>支援 NVD JSON 結構：</div>
+                <pre style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{`{
+  "vulnerabilities": [
+    {
+      "cve": {
+        "id": "CVE-2024-XXXX",
+        "descriptions": [{"lang":"en","value":"..."}],
+        "metrics": {"cvssMetricV31": [{"cvssData": {"baseScore": 9.8}}]}
+      }
+    }
+  ]
+}`}</pre>
+              </div>
+            </Card>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

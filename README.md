@@ -2,148 +2,153 @@
 
 ## 專案簡介
 
-NES SecVision 是一套針對 ISMS 稽核與漏洞管理設計的輕量化管理平台，整合前端儀表板與 FastAPI 後端服務，支援漏洞掃描、NIST 稽核、IP 群組管理與系統監控。
+NES SecVision 是一套針對 ISMS 稽核與漏洞管理設計的輕量化安全平台。專案結合 React 前端與 FastAPI 後端，採用 PostgreSQL 做為資料庫，提供漏洞掃描上傳、差異比對、主機歷程、NIST 稽核、IP 群組管理與儀表板監控。
 
-本專案重點在於快速部署與可維運性，適用於 Ubuntu 22.04 / 24.04，採用 PostgreSQL 做為資料庫，並透過 Nginx 與 systemd 進行生產環境佈署。
+本專案適合部署於 Ubuntu 22.04 / 24.04，透過 Nginx 反向代理與 systemd 管理後端服務。
 
 ## 專案架構
 
-- `backend/`：FastAPI API 服務，包含驗證、漏洞掃描、NIST 稽核、IP 群組與儀表板路由。
-- `deploy/`：Ubuntu 部署腳本、systemd 服務檔與 Nginx 設定檔。
-- `pages/`：前端頁面資源與 UI 元件。
-- `index.html`、`app.jsx`、`components.jsx`：前端入口頁面與 React 資源。
-- `api-client.js`：前端與後端通訊封裝。
-- `README.md`：專案說明文件。
+- `backend/`
+  - `main.py`：FastAPI 應用入口
+  - `config.py`：環境設定與連線配置
+  - `database.py`：SQLAlchemy 引擎與 session 管理
+  - `models/`：ORM 模型（Scan、Vulnerability、AuditScan、IPGroup、User）
+  - `routers/`：API 路由（auth、scans、nist、ipgroups、dashboard）
+  - `schemas/`：Pydantic 請求與回應模型
+  - `services/`：解析、差異計算、EPSS 查詢等業務邏輯
+  - `tests/`：後端單元測試
+- `pages/`：前端頁面（Dashboard、VulnScan、NIST、Login）
+- `components.jsx`：共用 UI 元件與視覺組件
+- `api-client.js`：前端與後端 API 封裝
+- `index.html`：前端入口與載入順序
+- `deploy/`：部署腳本與 Nginx / systemd 範本
 
 ## 核心功能
 
-- JWT 驗證與會話管理。
-- 漏洞掃描管理：檢視掃描清單、上傳掃描結果、刪除掃描、掃描差異比較。
-- NIST 稽核管理：上傳稽核檔、稽核結果瀏覽、比較與趨勢分析。
-- IP 群組管理：建立、查詢與刪除 IP 群組。
-- API 健康檢查與自動文件：`/health`、`/docs`。
+- JWT 認證與角色權限管理
+- 漏洞掃描管理：
+  - 上傳 Nessus CSV / NVD JSON
+  - 取得掃描清單與單一掃描明細
+  - 掃描差異比較（新增 / 持續 / 已解決）
+  - 主機歷程追蹤與時間軸展示
+- 風險分析：
+  - EPSS / VPR / CVSS 風險矩陣
+  - 優先修補清單
+- IP 群組管理：建立、查詢、刪除
+- NIST 稽核管理：上傳、瀏覽、Diff 比較、趨勢分析
+- 儀表板：弱點總數、風險分佈與合規率指標
+- API 文件：`/docs`
 
 ## 技術棧
 
 - 後端：FastAPI、Uvicorn
-- ORM：SQLAlchemy
-- 資料庫遷移：Alembic
+- ORM：SQLAlchemy 2.0
 - 資料庫：PostgreSQL
+- 資料庫遷移：Alembic
 - 認證：JWT（python-jose）
-- 前端：React 18 UMD、Babel Standalone
+- 前端：React 18 UMD + Babel Standalone
 - 部署：Nginx、systemd
-- 語言：Python 3.12、JavaScript
+- 測試：pytest
 
-## 本地開發
+## 開發環境安裝
 
-### 前端
+### 1. 建立 Python 虛擬環境
 
-1. 將專案根目錄作為靜態站點根目錄。
-2. 啟動簡單 HTTP 伺服器：
-
-```bash
-python3 -m http.server 8080
-```
-
-或：
-
-```bash
-npx serve .
-```
-
-3. 開啟瀏覽器並訪問 `http://localhost:8080`。
-4. 若要使用後端功能，請先啟動後端服務。
-
-### 後端
-
-1. 進入後端目錄：
-
-```bash
-cd backend
-```
-
-2. 建立虛擬環境並安裝相依套件：
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
+```powershell
+cd c:\GIT\NES\NES\backend
+..\..\.venv\Scripts\python.exe -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-3. 啟動開發伺服器：
+### 2. 啟動後端
 
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```powershell
+cd c:\GIT\NES\NES\backend
+.\.venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-4. 測試後端服務：
+### 3. 啟動前端
 
-- `http://127.0.0.1:8000/`
-- `http://127.0.0.1:8000/health`
-- `http://127.0.0.1:8000/docs`
+開發模式下，可使用簡單 HTTP 伺服器提供靜態前端：
 
-## 生產環境部署（Ubuntu）
-
-專案提供 `deploy/install.sh` 作為一鍵部署腳本，包含：
-
-- 安裝系統套件與 Python 環境
-- 建立 PostgreSQL 使用者與資料庫
-- 部署後端與安裝 Python 相依套件
-- 執行 Alembic migration
-- 建立預設管理員帳號
-- 部署前端靜態檔案
-- 設定 systemd 與 Nginx
-
-### 部署流程
-
-```bash
-cd deploy
-sudo bash install.sh
+```powershell
+cd c:\GIT\NES\NES
+python -m http.server 8080
 ```
 
-若要覆寫預設管理員帳號名稱與密碼：
+### 4. 瀏覽器訪問
 
-```bash
-sudo ADMIN_USER=secadmin ADMIN_PASS='StrongPass!234' bash install.sh
-```
+- 開發模式前端：`http://localhost:8080`
+- 後端 API：`http://127.0.0.1:8000`
+- API 文件：`http://127.0.0.1:8000/docs`
 
-部署完成後，系統會輸出：
+> 注意：若項目部署到 Ubuntu + Nginx 生產環境，前端對外可見端口通常為 `80`。
+> README 中 8080 只適用於本地開發靜態頁面測試，並非 production 端口。
 
-- 前端入口：`http://<SERVER_IP>/`
-- API 文件：`http://<SERVER_IP>/api/docs`
-
-> 生產環境對外入口為 `80` port，Nginx 會將前端靜態資源交付給瀏覽器，並將 `/api/` 反向代理到內部 Uvicorn 後端服務的 `127.0.0.1:8000`。
-
-請務必完成部署後立即更新管理員密碼，並檢查 `/opt/secvision/backend/.env` 中的資料庫密碼與 `SECRET_KEY` 配置。
-
-## 管理員帳號建立與重設
-
-若僅需建立或重設管理員帳號，可使用 `deploy/create-admin.sh`：
-
-```bash
-cd deploy
-sudo bash create-admin.sh admin 'Admin@123456' admin
-```
-
-該腳本會建立 `users` 表及對應帳號，若帳號已存在則會更新密碼與角色。
-
-## 重要 API 路由
+## 主要 API 路由
 
 - `GET /`：服務資訊
 - `GET /health`：健康檢查
-- `GET /docs`：FastAPI 自動文件
 - `POST /api/auth/token`：JWT 登入
-- `GET /api/dashboard`：儀表板資料
+- `GET /api/dashboard`：儀表板統計
 - `GET /api/scans`：掃描清單
-- `POST /api/scans/upload`：上傳掃描結果
+- `GET /api/scans/{id}`：掃描詳情
+- `GET /api/scans/diff?base={baseId}&comp={compId}`：掃描差異
+- `GET /api/scans/hosts/{host}/history`：主機漏洞歷程
+- `POST /api/scans/upload`：上傳漏洞掃描檔案
 - `GET /api/nist/scans`：NIST 稽核清單
-- `POST /api/nist/upload`：上傳 NIST 稽核資料
+- `GET /api/nist/scans/{id}`：NIST 稽核詳情
+- `GET /api/nist/diff?base={baseId}&comp={compId}`：NIST 差異比較
+- `GET /api/nist/trend`：NIST 趨勢分析
 - `GET /api/ipgroups`：IP 群組清單
+- `POST /api/ipgroups`：建立 IP 群組
+- `DELETE /api/ipgroups/{id}`：刪除 IP 群組
 
-## 常見問題
+## 功能說明
 
-- 若 `http://<SERVER_IP>:8000` 無法連線，請檢查 `secvision` systemd 服務是否已啟動，並確認防火牆與 Nginx 設定。
-- 若 `/docs` 正常但 `/` 回傳 404，通常表示部署中的後端版本與目前檔案不同步，請重新同步 `backend` 內容並重新啟動服務。
+### Vulnerability Scan
+
+- 支援 Nessus CSV 與 NVD JSON 上傳
+- 透過正式後端 API 儲存掃描結果至資料庫
+- 顯示弱點列表、篩選條件、欄位選擇與詳細說明
+- 提供 EPSS / VPR / CVSS 風險矩陣圖表
+- 顯示單一主機漏洞歷程與時間軸
+- Diff 比較支援新增、持續、已解決弱點類別
+
+### NIST Audit
+
+- 支援 Audit CSV 上傳
+- 取得稽核清單與詳細結果
+- 比較版本差異
+- 呈現合規率與趨勢
+
+### Dashboard
+
+- 弱點總數與風險分佈
+- NIST 合規率展示
+- 最近掃描與稽核摘要
+- 快速導覽至 Vulnerability Scan 或 NIST 頁面
+
+## 測試
+
+```powershell
+cd c:\GIT\NES\NES\backend
+.\.venv\Scripts\python.exe -m pytest tests -q
+```
+
+## 部署提示
+
+- Production 建議使用 PostgreSQL 16
+- `deploy/` 內含 Nginx 與 systemd 範本
+- 先完成 `alembic upgrade head`，再啟動 Uvicorn 服務
+- Nginx 將 `/api/` 代理至 `http://127.0.0.1:8000`
+
+## 注意事項
+
+- 請務必更新管理員密碼與 `SECRET_KEY`
+- 若 API 運作正常但前端無法載入，請檢查 `index.html` 與 `api-client.js` 中的 base path
+- 若要切換到正式後端，請確保前端網址與 `ALLOWED_ORIGINS` 相符
 
 ## 授權
 

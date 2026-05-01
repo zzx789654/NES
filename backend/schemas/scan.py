@@ -78,6 +78,29 @@ class ScanDetail(ScanOut):
     vulnerabilities: list[VulnerabilityOut] = []
 
 
+class HostHistoryEntry(BaseModel):
+    scan_id: int
+    scan_name: str
+    scan_date: date | None = None
+    uploaded_at: datetime
+    vuln_count: int
+    critical: int
+    high: int
+    medium: int
+    low: int
+    info: int
+
+
+class HostHistory(BaseModel):
+    host: str
+    history: list[HostHistoryEntry] = []
+    total_scans: int
+    first_seen: datetime | None = None
+    last_seen: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class DiffVuln(BaseModel):
     status: str  # new | resolved | persistent
     vuln: VulnerabilityOut

@@ -1,12 +1,12 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
 from models.scan import Scan, Vulnerability
 from routers.auth import get_current_user, require_role
-from schemas.scan import ScanOut, ScanDetail, ScanDiff
+from schemas.scan import ScanOut, ScanDetail, ScanDiff, HostHistory
 from services.nessus_parser import parse_nessus_csv
 from services.cve_parser import parse_nvd_json
 from services.diff_service import diff_scans
@@ -46,6 +46,53 @@ def get_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(get_current_
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
     return scan
+
+
+@router.get("/hosts/{host}/history", response_model=HostHistory)
+def get_host_history(host: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    scans = (
+        db.query(Scan)
+        .options(selectinload(Scan.vulnerabilities))
+        .filter(Scan.vulnerabilities.any(Vulnerability.host == host))
+        .order_by(Scan.scan_date.desc().nullslast(), Scan.uploaded_at.desc(), Scan.id.desc())
+        .all()
+    )
+
+    if not scans:
+        raise HTTPException(status_code=404, detail="Host history not found")
+
+    history = []
+    for scan in scans:
+        host_vulns = [v for v in scan.vulnerabilities if v.host == host]
+        counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+        for v in host_vulns:
+            key = (v.risk or "Info").lower()
+            if key in counts:
+                counts[key] += 1
+        history.append(
+            {
+                "scan_id": scan.id,
+                "scan_name": scan.name,
+                "scan_date": scan.scan_date,
+                "uploaded_at": scan.uploaded_at,
+                "vuln_count": len(host_vulns),
+                "critical": counts["critical"],
+                "high": counts["high"],
+                "medium": counts["medium"],
+                "low": counts["low"],
+                "info": counts["info"],
+            }
+        )
+
+    history.sort(key=lambda item: (item["uploaded_at"], item["scan_id"]), reverse=True)
+
+    return HostHistory(
+        host=host,
+        history=history,
+        total_scans=len(history),
+        first_seen=history[-1]["uploaded_at"] if history else None,
+        last_seen=history[0]["uploaded_at"] if history else None,
+    )
 
 
 @router.delete("/{scan_id}", status_code=204)
@@ -115,7 +162,7 @@ async def upload_scan(
             see_also=v.get("see_also"),
             cvss_v2_base=v.get("cvss_v2_base"),
             cvss_v2_temporal=v.get("cvss_v2_temporal"),
-            cvss_v3_base=v.get("cvss_v3_base"),
+            cvss_v3_base=v.get("cvss_v3_base") or v.get("cvss"),
             cvss_v3_temporal=v.get("cvss_v3_temporal"),
             cvss_v4_base=v.get("cvss_v4_base"),
             cvss_v4_threat_score=v.get("cvss_v4_threat_score"),

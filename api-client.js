@@ -87,6 +87,10 @@ const APIClient = (() => {
       return req('/api/scans/diff?base=' + baseId + '&comp=' + compId);
     },
 
+    getHostHistory(host) {
+      return req('/api/scans/hosts/' + encodeURIComponent(host) + '/history');
+    },
+
     uploadScan(file, name) {
       const form = new FormData();
       form.append('file', file);
