@@ -15,6 +15,7 @@ DB_PASS="changeme_$(openssl rand -hex 6)"
 if [[ -z "${ADMIN_PASS:-}" ]]; then
   ADMIN_PASS="Admin$(openssl rand -hex 4)"
 fi
+BRANCH=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
