@@ -132,3 +132,17 @@ def change_password(
         raise HTTPException(status_code=404, detail="User not found")
     user.hashed_pw = hash_password(body.new_password)
     db.commit()
+
+
+@router.post("/change-password", status_code=204)
+def change_password_me(
+    body: PasswordChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not body.current_password:
+        raise HTTPException(status_code=400, detail="Current password is required")
+    if not verify_password(body.current_password, current_user.hashed_pw):
+        raise HTTPException(status_code=400, detail="Incorrect current password")
+    current_user.hashed_pw = hash_password(body.new_password)
+    db.commit()
