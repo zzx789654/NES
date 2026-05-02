@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class AuditResultBase(BaseModel):
@@ -24,13 +24,20 @@ class AuditScanBase(BaseModel):
 
 class AuditScanOut(AuditScanBase):
     id: int
-    uploaded_at: datetime
-    total: int
-    passed: int
-    failed: int
-    warning: int
+    uploaded_at: datetime | None = None
+    total: int = 0
+    passed: int = 0
+    failed: int = 0
+    warning: int = 0
 
     model_config = {"from_attributes": True}
+
+    @field_validator("total", "passed", "failed", "warning", mode="before")
+    @classmethod
+    def int_default(cls, v):
+        if v is None:
+            return 0
+        return int(v)
 
 
 class AuditScanDetail(AuditScanOut):

@@ -39,13 +39,16 @@ def get_dashboard(db: Session = Depends(get_db), _=Depends(get_current_user)):
     latest_audit_date = None
     if latest_audit:
         latest_audit_date = str(latest_audit.scan_date) if latest_audit.scan_date else None
+        total = latest_audit.total or 0
+        passed = latest_audit.passed or 0
+        failed = latest_audit.failed or 0
+        warning = latest_audit.warning or 0
         nist_data = {
-            "passed": latest_audit.passed,
-            "failed": latest_audit.failed,
-            "warning": latest_audit.warning,
-            "total": latest_audit.total,
-            "pass_rate": round(latest_audit.passed / latest_audit.total * 100, 1)
-            if latest_audit.total > 0 else 0.0,
+            "passed": passed,
+            "failed": failed,
+            "warning": warning,
+            "total": total,
+            "pass_rate": round(passed / total * 100, 1) if total > 0 else 0.0,
         }
 
     return DashboardSummary(
