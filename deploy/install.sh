@@ -60,6 +60,7 @@ echo "=== 6. 建立預設管理者 ==="
 sudo bash "$REPO_DIR/deploy/create-admin.sh" "$ADMIN_USER" "$ADMIN_PASS" admin
 
 echo "=== 7. 部署前端 ==="
+DEPLOY_VERSION=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)
 sudo mkdir -p $WEB_DIR
 sudo cp "$REPO_DIR/index.html" \
         "$REPO_DIR/app.jsx" \
@@ -67,6 +68,7 @@ sudo cp "$REPO_DIR/index.html" \
         "$REPO_DIR/api-client.js" \
         $WEB_DIR/
 sudo cp -r "$REPO_DIR/pages" $WEB_DIR/
+sudo sed -i "s/__DEPLOY_VERSION__/${DEPLOY_VERSION}/g" "$WEB_DIR/index.html"
 sudo chown -R www-data:www-data $WEB_DIR
 
 echo "=== 8. 安裝 systemd 服務 ==="

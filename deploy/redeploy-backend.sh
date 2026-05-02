@@ -24,6 +24,7 @@ sudo cp -a "$REPO_DIR/backend/." "$BACKEND_DIR/"
 sudo chown -R secvision:secvision "$BACKEND_DIR"
 
 echo "==> Sync frontend files"
+DEPLOY_VERSION=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)
 sudo mkdir -p "$WEB_DIR"
 sudo cp "$REPO_DIR/index.html" \
         "$REPO_DIR/app.jsx" \
@@ -31,6 +32,8 @@ sudo cp "$REPO_DIR/index.html" \
         "$REPO_DIR/api-client.js" \
         "$WEB_DIR/"
 sudo cp -r "$REPO_DIR/pages" "$WEB_DIR/"
+# 注入 git hash 作為 cache-busting 版本號，強制瀏覽器重新下載更新的 JSX/JS 檔
+sudo sed -i "s/__DEPLOY_VERSION__/${DEPLOY_VERSION}/g" "$WEB_DIR/index.html"
 sudo chown -R www-data:www-data "$WEB_DIR"
 
 echo "==> Deploy nginx site config"
