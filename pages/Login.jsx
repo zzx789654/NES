@@ -20,11 +20,6 @@ function LoginPage({ onLogin }) {
     }
   }
 
-  function handleDemo() {
-    APIClient.loginDemo();
-    onLogin();
-  }
-
   const inputStyle = {
     width:'100%', padding:'9px 12px', fontSize:13,
     background:'var(--surface2)', border:'1px solid var(--border)',
@@ -84,13 +79,6 @@ function LoginPage({ onLogin }) {
             {loading ? '登入中…' : '登入'}
           </button>
         </form>
-
-        <button onClick={handleDemo}
-          style={{width:'100%',padding:'9px',background:'transparent',color:'var(--text2)',fontSize:12,borderRadius:'var(--r)',border:'1px solid var(--border)',cursor:'pointer',transition:'all 0.15s'}}
-          onMouseEnter={e => { e.currentTarget.style.background='var(--surface2)'; e.currentTarget.style.color='var(--text)'; }}
-          onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='var(--text2)'; }}>
-          Demo 模式（無需後端）
-        </button>
 
         <div style={{marginTop:16,padding:'10px 12px',background:'var(--surface2)',borderRadius:'var(--rsm)',fontSize:11,color:'var(--text3)'}}>
           後端帳號：<span style={{fontFamily:'var(--font-mono)',color:'var(--text2)'}}>admin / admin</span>

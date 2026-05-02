@@ -1,9 +1,12 @@
 from datetime import date
+from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from sqlalchemy import nulls_last
 from sqlalchemy.orm import Session
 
 from database import get_db
+from limiter import limiter
 from models.audit import AuditScan, AuditResult
 from routers.auth import get_current_user, require_role
 from schemas.audit import AuditScanOut, AuditScanDetail, AuditDiff, AuditTrendPoint
@@ -12,14 +15,23 @@ from services.diff_service import diff_audits
 
 router = APIRouter(prefix="/api/nist", tags=["nist"])
 
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
 
 @router.get("/scans", response_model=list[AuditScanOut])
-def list_audit_scans(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    return (
+def list_audit_scans(
+    page: Optional[int] = Query(None, ge=1, description="Page number (1-based)"),
+    page_size: int = Query(100, ge=1, le=500, description="Results per page (max 500)"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    q = (
         db.query(AuditScan)
-        .order_by(AuditScan.scan_date.desc().nullslast(), AuditScan.uploaded_at.desc())
-        .all()
+        .order_by(nulls_last(AuditScan.scan_date.desc()), AuditScan.uploaded_at.desc())
     )
+    if page is not None:
+        q = q.offset((page - 1) * page_size).limit(page_size)
+    return q.all()
 
 
 @router.get("/scans/{scan_id}", response_model=AuditScanDetail)
@@ -44,7 +56,9 @@ def delete_audit_scan(
 
 
 @router.post("/upload", response_model=AuditScanOut, status_code=201)
+@limiter.limit("5/minute")
 async def upload_audit(
+    request: Request,
     file: UploadFile = File(...),
     name: str = Form(...),
     scan_date: str = Form(None),
@@ -53,8 +67,17 @@ async def upload_audit(
 ):
     content = await file.read()
     filename = file.filename or ""
+
+    # File size guard
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large. Maximum allowed size is 50 MB")
+
     if not filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only .csv files are supported")
+
+    # Basic CSV content sanity check
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
 
     parsed_date: date | None = None
     if scan_date:

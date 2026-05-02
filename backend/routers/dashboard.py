@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy import nulls_last
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -15,7 +16,7 @@ def get_dashboard(db: Session = Depends(get_db), _=Depends(get_current_user)):
     # Latest scan vulnerabilities
     latest_scan = (
         db.query(Scan)
-        .order_by(Scan.scan_date.desc().nullslast(), Scan.uploaded_at.desc())
+        .order_by(nulls_last(Scan.scan_date.desc()), Scan.uploaded_at.desc())
         .first()
     )
     risk_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0, "total": 0}
@@ -31,7 +32,7 @@ def get_dashboard(db: Session = Depends(get_db), _=Depends(get_current_user)):
     # Latest audit scan
     latest_audit = (
         db.query(AuditScan)
-        .order_by(AuditScan.scan_date.desc().nullslast(), AuditScan.uploaded_at.desc())
+        .order_by(nulls_last(AuditScan.scan_date.desc()), AuditScan.uploaded_at.desc())
         .first()
     )
     nist_data = {"passed": 0, "failed": 0, "warning": 0, "total": 0, "pass_rate": 0.0}

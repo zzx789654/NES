@@ -1,12 +1,15 @@
 from datetime import date
+from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from sqlalchemy import nulls_last
+from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
+from limiter import limiter
 from models.scan import Scan, Vulnerability
 from routers.auth import get_current_user, require_role
-from schemas.scan import ScanOut, ScanDetail, ScanDiff
+from schemas.scan import ScanOut, ScanDetail, ScanDiff, HostHistory
 from services.nessus_parser import parse_nessus_csv
 from services.cve_parser import parse_nvd_json
 from services.diff_service import diff_scans
@@ -14,10 +17,20 @@ from services.epss_service import fetch_epss_scores
 
 router = APIRouter(prefix="/api/scans", tags=["scans"])
 
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
 
 @router.get("", response_model=list[ScanOut])
-def list_scans(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    return db.query(Scan).order_by(Scan.scan_date.desc().nullslast(), Scan.uploaded_at.desc()).all()
+def list_scans(
+    page: Optional[int] = Query(None, ge=1, description="Page number (1-based)"),
+    page_size: int = Query(100, ge=1, le=500, description="Results per page (max 500)"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    q = db.query(Scan).order_by(nulls_last(Scan.scan_date.desc()), Scan.uploaded_at.desc())
+    if page is not None:
+        q = q.offset((page - 1) * page_size).limit(page_size)
+    return q.all()
 
 
 @router.get("/diff", response_model=ScanDiff)
@@ -48,6 +61,53 @@ def get_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(get_current_
     return scan
 
 
+@router.get("/hosts/{host}/history", response_model=HostHistory)
+def get_host_history(host: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    scans = (
+        db.query(Scan)
+        .options(selectinload(Scan.vulnerabilities))
+        .filter(Scan.vulnerabilities.any(Vulnerability.host == host))
+        .order_by(nulls_last(Scan.scan_date.desc()), Scan.uploaded_at.desc(), Scan.id.desc())
+        .all()
+    )
+
+    if not scans:
+        raise HTTPException(status_code=404, detail="Host history not found")
+
+    history = []
+    for scan in scans:
+        host_vulns = [v for v in scan.vulnerabilities if v.host == host]
+        counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+        for v in host_vulns:
+            key = (v.risk or "Info").lower()
+            if key in counts:
+                counts[key] += 1
+        history.append(
+            {
+                "scan_id": scan.id,
+                "scan_name": scan.name,
+                "scan_date": scan.scan_date,
+                "uploaded_at": scan.uploaded_at,
+                "vuln_count": len(host_vulns),
+                "critical": counts["critical"],
+                "high": counts["high"],
+                "medium": counts["medium"],
+                "low": counts["low"],
+                "info": counts["info"],
+            }
+        )
+
+    history.sort(key=lambda item: (item["uploaded_at"], item["scan_id"]), reverse=True)
+
+    return HostHistory(
+        host=host,
+        history=history,
+        total_scans=len(history),
+        first_seen=history[-1]["uploaded_at"] if history else None,
+        last_seen=history[0]["uploaded_at"] if history else None,
+    )
+
+
 @router.delete("/{scan_id}", status_code=204)
 def delete_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(require_role("admin", "analyst"))):
     scan = db.query(Scan).filter(Scan.id == scan_id).first()
@@ -58,7 +118,9 @@ def delete_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(require_r
 
 
 @router.post("/upload", response_model=ScanOut, status_code=201)
+@limiter.limit("5/minute")
 async def upload_scan(
+    request: Request,
     file: UploadFile = File(...),
     name: str = Form(...),
     scan_date: str = Form(None),
@@ -67,6 +129,21 @@ async def upload_scan(
 ):
     content = await file.read()
     filename = file.filename or ""
+
+    # File size guard
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large. Maximum allowed size is 50 MB")
+
+    # Basic content sanity check
+    if filename.endswith(".csv"):
+        if not content or content[:1] not in (b'"', b"'") and not (32 <= content[0] <= 126):
+            raise HTTPException(status_code=400, detail="Invalid CSV content")
+    elif filename.endswith(".json"):
+        stripped = content.lstrip()
+        if not stripped or stripped[:1] not in (b"{", b"["):
+            raise HTTPException(status_code=400, detail="Invalid JSON content")
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file type. Upload .csv or .json")
 
     parsed_date: date | None = None
     if scan_date:
@@ -86,7 +163,7 @@ async def upload_scan(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
     else:
-        raise HTTPException(status_code=400, detail="Unsupported file type. Upload .csv or .json")
+        parsed = parse_nvd_json(content, name, parsed_date)
 
     scan = Scan(
         name=parsed["name"],
@@ -108,17 +185,33 @@ async def upload_scan(
             plugin_id=v.get("plugin_id"),
             cve=v.get("cve"),
             risk=v.get("risk"),
+            risk_factor=v.get("risk_factor"),
+            stig_severity=v.get("stig_severity"),
             host=v.get("host"),
             port=v.get("port"),
             protocol=v.get("protocol"),
             name=v.get("name"),
-            cvss=v.get("cvss"),
-            epss=epss_map.get(cve),
-            vpr=v.get("vpr"),
             synopsis=v.get("synopsis"),
             description=v.get("description"),
             solution=v.get("solution"),
             plugin_output=v.get("plugin_output"),
+            see_also=v.get("see_also"),
+            cvss_v2_base=v.get("cvss_v2_base"),
+            cvss_v2_temporal=v.get("cvss_v2_temporal"),
+            cvss_v3_base=v.get("cvss_v3_base") or v.get("cvss"),
+            cvss_v3_temporal=v.get("cvss_v3_temporal"),
+            cvss_v4_base=v.get("cvss_v4_base"),
+            cvss_v4_threat_score=v.get("cvss_v4_threat_score"),
+            vpr=v.get("vpr"),
+            epss=epss_map.get(cve),
+            bid=v.get("bid"),
+            xref=v.get("xref"),
+            mskb=v.get("mskb"),
+            plugin_publication_date=v.get("plugin_publication_date"),
+            plugin_modification_date=v.get("plugin_modification_date"),
+            metasploit=v.get("metasploit", False),
+            core_impact=v.get("core_impact", False),
+            canvas=v.get("canvas", False),
         )
         db.add(vuln)
 

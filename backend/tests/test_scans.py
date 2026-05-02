@@ -91,6 +91,19 @@ def test_scan_diff_not_found(client, admin_token):
     assert resp.status_code == 404
 
 
+def test_host_history(client, admin_token):
+    _upload(client, admin_token, name="H1", csv=NESSUS_CSV)
+    _upload(client, admin_token, name="H2", csv=NESSUS_CSV_2)
+
+    resp = client.get("/api/scans/hosts/192.168.1.1/history", headers=auth(admin_token))
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["host"] == "192.168.1.1"
+    assert data["total_scans"] == 2
+    assert data["history"][0]["scan_name"] == "H2"
+    assert data["history"][0]["vuln_count"] >= 1
+
+
 def test_upload_unsupported_extension(client, admin_token):
     with patch("routers.scans.fetch_epss_scores", new=AsyncMock(return_value={})):
         resp = client.post(

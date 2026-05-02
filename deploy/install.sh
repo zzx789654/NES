@@ -1,6 +1,6 @@
 #!/bin/bash
 # SecVision 快速部署腳本 — Ubuntu 24.04 / 22.04
-# 用法：bash deploy/install.sh [--db-pass <密碼>] [--admin-pass <密碼>]
+# 用法：bash deploy/install.sh [--db-pass <密碼>] [--admin-pass <密碼>] [--branch <分支>]
 set -euo pipefail
 
 APP_DIR=/opt/secvision
@@ -9,7 +9,6 @@ REPO_DIR=$(cd "$(dirname "$0")/.." && pwd)
 SERVER_IP=$(hostname -I | awk '{print $1}')
 ADMIN_USER=${ADMIN_USER:-admin}
 ADMIN_PASS=${ADMIN_PASS:-Admin@123456}
-
 
 # ── 預設值（可透過參數覆蓋）────────────────────────────────────────────────────
 DB_PASS="changeme_$(openssl rand -hex 6)"
@@ -21,6 +20,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --db-pass)    DB_PASS="$2";    shift 2 ;;
     --admin-pass) ADMIN_PASS="$2"; shift 2 ;;
+    --branch)     BRANCH="$2";     shift 2 ;;
     *) echo "未知參數: $1"; exit 1 ;;
   esac
 done
@@ -28,6 +28,22 @@ done
 echo "======================================================"
 echo "  SecVision ISMS Portal 部署腳本"
 echo "======================================================"
+
+echo ""
+echo "=== 0. 更新程式碼至最新版 ==="
+if git -C "$REPO_DIR" rev-parse --git-dir > /dev/null 2>&1; then
+  # 若未指定分支，使用目前所在分支
+  if [[ -z "$BRANCH" ]]; then
+    BRANCH=$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+  fi
+  echo "  分支：$BRANCH"
+  git -C "$REPO_DIR" fetch origin "$BRANCH" 2>&1 | sed 's/^/  /'
+  git -C "$REPO_DIR" checkout "$BRANCH"
+  git -C "$REPO_DIR" pull origin "$BRANCH" 2>&1 | sed 's/^/  /'
+  echo "  已更新至 commit: $(git -C "$REPO_DIR" rev-parse --short HEAD)"
+else
+  echo "  ⚠️  非 git 目錄，跳過更新步驟（請確認程式碼為最新版）"
+fi
 
 echo ""
 echo "=== 1. 安裝系統套件 ==="
@@ -74,14 +90,15 @@ echo "=== 6. 建立預設管理者 ==="
 sudo bash "$REPO_DIR/deploy/create-admin.sh" "$ADMIN_USER" "$ADMIN_PASS" admin
 
 echo "=== 7. 部署前端 ==="
+DEPLOY_VERSION=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)
 sudo mkdir -p $WEB_DIR
 sudo cp "$REPO_DIR/index.html" \
         "$REPO_DIR/app.jsx" \
         "$REPO_DIR/components.jsx" \
-        "$REPO_DIR/mock-api.js" \
         "$REPO_DIR/api-client.js" \
         $WEB_DIR/
 sudo cp -r "$REPO_DIR/pages" $WEB_DIR/
+sudo sed -i "s/__DEPLOY_VERSION__/${DEPLOY_VERSION}/g" "$WEB_DIR/index.html"
 sudo chown -R www-data:www-data $WEB_DIR
 
 echo "=== 8. 安裝 systemd 服務 ==="

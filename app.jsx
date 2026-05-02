@@ -10,16 +10,18 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
 }/*EDITMODE-END*/;
 
 const NAV = [
-  { id:'dashboard', label:'Dashboard', icon:'⬡', sub:'概覽' },
-  { id:'vulnscan',  label:'Vulnerability Scan', icon:'⬡', sub:'弱點掃描' },
-  { id:'nist',      label:'NIST', icon:'⬡', sub:'安全框架' },
+  { id:'dashboard',  label:'Dashboard',        icon:'⬡', sub:'概覽' },
+  { id:'vulnscan',   label:'Vulnerability Scan', icon:'⬡', sub:'弱點掃描' },
+  { id:'nist',       label:'NIST',              icon:'⬡', sub:'安全框架' },
+  { id:'users',      label:'帳號管理',           icon:'⬡', sub:'User Management' },
 ];
 
 function Sidebar({ page, setPage, stats, onLogout, onChangePassword }) {
   const counts = {
     dashboard: null,
-    vulnscan:  stats ? stats.severityCounts.Critical + stats.severityCounts.High : null,
+    vulnscan:  stats && stats.risk ? stats.risk.critical + stats.risk.high : null,
     nist:      null,
+    users:     null,
   };
 
   return (
@@ -68,10 +70,10 @@ function Sidebar({ page, setPage, stats, onLogout, onChangePassword }) {
       {/* Footer */}
       <div style={{padding:'12px 18px',borderTop:'1px solid var(--border)'}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <div style={{width:28,height:28,borderRadius:'50%',background:'var(--accent-bg)',border:'1px solid var(--accent)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'var(--accent)'}}>A</div>
+          <div style={{width:28,height:28,borderRadius:'50%',background:'var(--accent-bg)',border:'1px solid var(--accent)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'var(--accent)'}}>{currentUser ? currentUser.username[0].toUpperCase() : 'U'}</div>
           <div>
-            <div style={{fontSize:12,fontWeight:500}}>Admin</div>
-            <div style={{fontSize:10,color:'var(--text3)'}}>資安管理員</div>
+            <div style={{fontSize:12,fontWeight:500}}>{currentUser ? currentUser.username : '…'}</div>
+            <div style={{fontSize:10,color:'var(--text3)'}}>{currentUser ? (currentUser.role === 'admin' ? '管理員' : currentUser.role === 'analyst' ? '分析師' : '檢視者') : ''}</div>
           </div>
         </div>
         <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -112,6 +114,7 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => typeof APIClient !== 'undefined' && APIClient.isLoggedIn());
   const [page, setPage] = useState(() => localStorage.getItem('secvision_page') || TWEAK_DEFAULTS.defaultPage);
   const [stats, setStats] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
     function handleUnauth() { setIsLoggedIn(false); }
@@ -119,10 +122,21 @@ function App() {
     return () => window.removeEventListener('secvision:unauthorized', handleUnauth);
   }, []);
 
+  const refreshStats = () => {
+    APIClient.getDashboardStats()
+      .then(data => setStats(data))
+      .catch(() => setStats(null));
+  };
+
   useEffect(() => {
-    setStats(MockAPI.getDashboardStats());
+    if (isLoggedIn) {
+      refreshStats();
+      APIClient.getMe().then(u => setCurrentUser(u)).catch(() => {});
+    } else {
+      setCurrentUser(null);
+    }
     applyTweaks(TWEAK_DEFAULTS);
-  }, []);
+  }, [isLoggedIn]);
 
   useEffect(() => {
     localStorage.setItem('secvision_page', page);
@@ -153,6 +167,7 @@ function App() {
     dashboard: window.DashboardPage,
     vulnscan:  window.VulnScanPage,
     nist:      window.NISTPage,
+    users:     window.UserManagementPage,
   };
 
   const PageComponent = PAGE_MAP[page] || (() => <div style={{padding:40,color:'var(--text2)'}}>頁面載入中…</div>);
@@ -167,7 +182,7 @@ function App() {
         onLogout={() => { APIClient.logout(); setIsLoggedIn(false); }}
       />
       <main style={{flex:1,overflow:'auto',background:'var(--bg)',padding:'24px 32px'}}>
-        <PageComponent onNavigate={setPage} onStatsChange={() => setStats(MockAPI.getDashboardStats())} />
+        <PageComponent onNavigate={setPage} onStatsChange={refreshStats} />
       </main>
     </div>
   );

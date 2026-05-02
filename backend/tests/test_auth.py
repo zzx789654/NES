@@ -49,7 +49,7 @@ def test_get_me_unauthenticated(client):
 def test_register_by_admin(client, admin_token):
     resp = client.post(
         "/api/auth/register",
-        json={"username": "newuser", "password": "newpass", "role": "viewer"},
+        json={"username": "newuser", "password": "Newpass1!", "role": "viewer"},
         headers=auth(admin_token),
     )
     assert resp.status_code == 201
@@ -62,12 +62,12 @@ def test_register_by_admin(client, admin_token):
 def test_register_duplicate_username(client, admin_token):
     client.post(
         "/api/auth/register",
-        json={"username": "dup", "password": "p", "role": "viewer"},
+        json={"username": "dup", "password": "Duppass1!", "role": "viewer"},
         headers=auth(admin_token),
     )
     resp = client.post(
         "/api/auth/register",
-        json={"username": "dup", "password": "p", "role": "viewer"},
+        json={"username": "dup", "password": "Duppass1!", "role": "viewer"},
         headers=auth(admin_token),
     )
     assert resp.status_code == 409
@@ -76,7 +76,7 @@ def test_register_duplicate_username(client, admin_token):
 def test_register_non_admin_forbidden(client, viewer_token):
     resp = client.post(
         "/api/auth/register",
-        json={"username": "blocked", "password": "p", "role": "viewer"},
+        json={"username": "blocked", "password": "Blocked1!", "role": "viewer"},
         headers=auth(viewer_token),
     )
     assert resp.status_code == 403
@@ -85,7 +85,7 @@ def test_register_non_admin_forbidden(client, viewer_token):
 def test_register_invalid_role(client, admin_token):
     resp = client.post(
         "/api/auth/register",
-        json={"username": "badrole", "password": "p", "role": "superadmin"},
+        json={"username": "badrole", "password": "Badrole1!", "role": "superadmin"},
         headers=auth(admin_token),
     )
     assert resp.status_code == 400

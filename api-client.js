@@ -9,7 +9,7 @@ const APIClient = (() => {
 
   function authHeaders() {
     const token = getToken();
-    if (token && token !== '__demo__') {
+    if (token) {
       return { 'Authorization': 'Bearer ' + token };
     }
     return {};
@@ -81,10 +81,6 @@ const APIClient = (() => {
       return data;
     },
 
-    loginDemo() {
-      sessionStorage.setItem(TOKEN_KEY, '__demo__');
-    },
-
     logout() {
       sessionStorage.removeItem(TOKEN_KEY);
     },
@@ -118,6 +114,10 @@ const APIClient = (() => {
 
     getScanDiff(baseId, compId) {
       return req('/api/scans/diff?base=' + baseId + '&comp=' + compId);
+    },
+
+    getHostHistory(host) {
+      return req('/api/scans/hosts/' + encodeURIComponent(host) + '/history');
     },
 
     uploadScan(file, name) {
@@ -165,8 +165,21 @@ const APIClient = (() => {
       });
     },
 
+    updateIPGroup(id, name, ips) {
+      return req('/api/ipgroups/' + id, {
+        method: 'PUT',
+        body: JSON.stringify({ name, ips }),
+      });
+    },
+
     deleteIPGroup(id) {
       return req('/api/ipgroups/' + id, { method: 'DELETE' });
+    },
+
+    // ─── NIST Audit (delete) ─────────────────────────────────────────────────
+
+    deleteNISTScan(id) {
+      return req('/api/nist/scans/' + id, { method: 'DELETE' });
     },
   };
 })();
