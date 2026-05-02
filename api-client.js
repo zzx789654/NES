@@ -85,11 +85,30 @@ const APIClient = (() => {
       sessionStorage.removeItem(TOKEN_KEY);
     },
 
-    changePassword(currentPassword, newPassword) {
-      return req('/api/auth/change-password', {
-        method: 'POST',
-        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    changePassword(userId, newPassword) {
+      return req('/api/auth/users/' + userId + '/password', {
+        method: 'PUT',
+        body: JSON.stringify({ new_password: newPassword }),
       });
+    },
+
+    getMe() {
+      return req('/api/auth/me');
+    },
+
+    getUsers() {
+      return req('/api/auth/users');
+    },
+
+    createUser(username, password, role) {
+      return req('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ username, password, role }),
+      });
+    },
+
+    deleteUser(id) {
+      return req('/api/auth/users/' + id, { method: 'DELETE' });
     },
 
     // ─── Dashboard ───────────────────────────────────────────────────────────
