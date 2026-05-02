@@ -40,8 +40,18 @@ def scan_diff(
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    base_scan = db.query(Scan).filter(Scan.id == base).first()
-    comp_scan = db.query(Scan).filter(Scan.id == comp).first()
+    base_scan = (
+        db.query(Scan)
+        .options(selectinload(Scan.vulnerabilities))
+        .filter(Scan.id == base)
+        .first()
+    )
+    comp_scan = (
+        db.query(Scan)
+        .options(selectinload(Scan.vulnerabilities))
+        .filter(Scan.id == comp)
+        .first()
+    )
     if not base_scan or not comp_scan:
         raise HTTPException(status_code=404, detail="Scan not found")
 
@@ -55,7 +65,12 @@ def scan_diff(
 
 @router.get("/{scan_id}", response_model=ScanDetail)
 def get_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    scan = (
+        db.query(Scan)
+        .options(selectinload(Scan.vulnerabilities))
+        .filter(Scan.id == scan_id)
+        .first()
+    )
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
     return scan
