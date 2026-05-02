@@ -192,8 +192,21 @@ const APIClient = (() => {
       });
     },
 
+    updateIPGroup(id, name, ips) {
+      return req('/api/ipgroups/' + id, {
+        method: 'PUT',
+        body: JSON.stringify({ name, ips }),
+      });
+    },
+
     deleteIPGroup(id) {
       return req('/api/ipgroups/' + id, { method: 'DELETE' });
+    },
+
+    // ─── NIST Audit (delete) ─────────────────────────────────────────────────
+
+    deleteNISTScan(id) {
+      return req('/api/nist/scans/' + id, { method: 'DELETE' });
     },
   };
 })();

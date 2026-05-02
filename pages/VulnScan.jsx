@@ -155,20 +155,15 @@ function IPGroupManager({ allHosts, selectedIPs, onSelectIPs }) {
   const [newGroupName, setNewGroupName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [editTarget, setEditTarget] = useState(null); // {id, name, ips}
+  const [editName, setEditName] = useState('');
+  const [editIPs, setEditIPs] = useState([]);
 
   const loadGroups = () => {
     setLoading(true);
     return APIClient.getIPGroups()
-      .then(data => {
-        setGroups(data);
-        setError('');
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message || '無法載入 IP 群組');
-        setGroups([]);
-        setLoading(false);
-      });
+      .then(data => { setGroups(data); setError(''); setLoading(false); })
+      .catch(err => { setError(err.message || '無法載入 IP 群組'); setGroups([]); setLoading(false); });
   };
 
   useEffect(() => { loadGroups(); }, []);
@@ -177,12 +172,27 @@ function IPGroupManager({ allHosts, selectedIPs, onSelectIPs }) {
     const name = newGroupName.trim();
     if (!name || selectedIPs.length === 0) return;
     APIClient.createIPGroup(name, selectedIPs)
-      .then(() => {
-        setNewGroupName('');
-        loadGroups();
-      })
+      .then(() => { setNewGroupName(''); loadGroups(); })
       .catch(err => alert(err.message || '無法儲存 IP 群組'));
   };
+
+  const startEdit = (group) => {
+    setEditTarget(group);
+    setEditName(group.name);
+    setEditIPs([...group.ips]);
+  };
+
+  const saveEdit = () => {
+    const name = editName.trim();
+    if (!name || editIPs.length === 0) return;
+    APIClient.updateIPGroup(editTarget.id, name, editIPs)
+      .then(() => { setEditTarget(null); loadGroups(); })
+      .catch(err => alert(err.message || '無法更新 IP 群組'));
+  };
+
+  const toggleEditIP = ip => setEditIPs(prev =>
+    prev.includes(ip) ? prev.filter(x => x !== ip) : [...prev, ip]
+  );
 
   const deleteGroup = id => {
     APIClient.deleteIPGroup(id)
@@ -196,6 +206,53 @@ function IPGroupManager({ allHosts, selectedIPs, onSelectIPs }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* 編輯群組 Modal */}
+      {editTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'oklch(0 0 0 / 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--rlg)', padding: '24px 28px', width: 420, maxWidth: '90vw' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>編輯群組 — {editTarget.name}</div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>群組名稱</div>
+              <input value={editName} onChange={e => setEditName(e.target.value)}
+                style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '8px 12px', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6 }}>
+                選擇 IP（{editIPs.length} 已選）—— 點擊切換
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 140, overflowY: 'auto', padding: '6px', background: 'var(--surface2)', borderRadius: 'var(--r)', border: '1px solid var(--border)' }}>
+                {allHosts.length === 0
+                  ? <span style={{ fontSize: 12, color: 'var(--text3)' }}>無可選主機（請先載入掃描）</span>
+                  : allHosts.map(ip => {
+                    const sel = editIPs.includes(ip);
+                    return (
+                      <button key={ip} onClick={() => toggleEditIP(ip)}
+                        style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontFamily: 'var(--font-mono)', cursor: 'pointer', border: `1px solid ${sel ? 'var(--accent)' : 'var(--border)'}`, background: sel ? 'var(--accent-bg)' : 'transparent', color: sel ? 'var(--accent)' : 'var(--text2)', fontWeight: sel ? 700 : 400, transition: 'all 0.12s' }}>
+                        {ip}
+                      </button>
+                    );
+                  })
+                }
+              </div>
+              {/* 也可手動輸入 IP */}
+              <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text3)' }}>
+                目前已選：{editIPs.length === 0 ? '—' : editIPs.join('、')}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={saveEdit} disabled={!editName.trim() || editIPs.length === 0}
+                style={{ padding: '7px 18px', borderRadius: 'var(--r)', background: 'var(--accent)', color: '#000', border: 'none', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                儲存變更
+              </button>
+              <button onClick={() => setEditTarget(null)}
+                style={{ padding: '7px 18px', borderRadius: 'var(--r)', background: 'var(--surface2)', color: 'var(--text)', border: '1px solid var(--border)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10 }}>
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '12px' }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 8 }}>
@@ -247,6 +304,9 @@ function IPGroupManager({ allHosts, selectedIPs, onSelectIPs }) {
               title={group.ips.join(', ')}>
               {group.name} <span style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>({group.ips.length})</span>
             </button>
+            <button onClick={() => startEdit(group)}
+              style={{ padding: '4px 7px', fontSize: 12, cursor: 'pointer', background: 'none', border: 'none', color: 'var(--text3)', borderLeft: '1px solid var(--border)' }}
+              title="編輯群組">✎</button>
             <button onClick={() => deleteGroup(group.id)}
               style={{ padding: '4px 8px', fontSize: 13, cursor: 'pointer', background: 'none', border: 'none', color: 'var(--text3)', borderLeft: '1px solid var(--border)' }}
               title="刪除群組">×</button>
