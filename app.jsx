@@ -16,7 +16,7 @@ const NAV = [
   { id:'users',      label:'帳號管理',           icon:'⬡', sub:'User Management' },
 ];
 
-function Sidebar({ page, setPage, stats, onLogout, onChangePassword }) {
+function Sidebar({ page, setPage, stats, onLogout, onChangePassword, currentUser }) {
   const counts = {
     dashboard: null,
     vulnscan:  stats && stats.risk ? stats.risk.critical + stats.risk.high : null,
@@ -147,17 +147,12 @@ function App() {
   }
 
   async function handleChangePassword() {
-    if (APIClient.isDemoMode && APIClient.isDemoMode()) {
-      alert('Demo 模式不支援變更密碼');
-      return;
-    }
-    const currentPassword = window.prompt('請輸入目前密碼');
-    if (!currentPassword) return;
-    const newPassword = window.prompt('請輸入新密碼（至少 8 碼）');
+    if (!currentUser) return;
+    const newPassword = window.prompt('請輸入新密碼（至少 8 碼，需含大寫、數字、特殊字元）');
     if (!newPassword) return;
     try {
-      await APIClient.changePassword(currentPassword, newPassword);
-      alert('✅ 密碼已更新，請使用新密碼登入');
+      await APIClient.changePassword(currentUser.id, newPassword);
+      alert('✅ 密碼已更新');
     } catch (err) {
       alert('❌ 變更密碼失敗：' + (err.message || '未知錯誤'));
     }
@@ -178,6 +173,7 @@ function App() {
         page={page}
         setPage={setPage}
         stats={stats}
+        currentUser={currentUser}
         onChangePassword={handleChangePassword}
         onLogout={() => { APIClient.logout(); setIsLoggedIn(false); }}
       />
