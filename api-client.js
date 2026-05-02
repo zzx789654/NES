@@ -43,6 +43,32 @@ const APIClient = (() => {
       return !!getToken();
     },
 
+    getMe() {
+      return req('/api/auth/me');
+    },
+
+    getUsers() {
+      return req('/api/auth/users');
+    },
+
+    createUser(username, password, role) {
+      return req('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ username, password, role }),
+      });
+    },
+
+    deleteUser(id) {
+      return req('/api/auth/users/' + id, { method: 'DELETE' });
+    },
+
+    changePassword(userId, newPassword) {
+      return req('/api/auth/users/' + userId + '/password', {
+        method: 'PUT',
+        body: JSON.stringify({ new_password: newPassword }),
+      });
+    },
+
     async login(username, password) {
       const body = new URLSearchParams({ username, password });
       const res = await fetch('/api/auth/token', {
