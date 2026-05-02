@@ -33,9 +33,10 @@ def upgrade() -> None:
         op.add_column("users", sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()))
 
     if not _col_exists("users", "password_changed_at"):
+        # Use a string literal default — SQLite does not allow function calls as DEFAULT
         op.add_column("users", sa.Column(
             "password_changed_at", sa.DateTime(timezone=True),
-            nullable=False, server_default=sa.func.now()
+            nullable=False, server_default=sa.text("'2024-01-01 00:00:00'")
         ))
 
     if not _col_exists("users", "password_expires_days"):

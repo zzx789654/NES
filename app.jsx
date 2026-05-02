@@ -143,7 +143,7 @@ function Sidebar({ page, setPage, stats, onLogout, currentUser, onChangePw }) {
             </button>
           )}
         </div>
-        <div style={{marginTop:8,fontSize:10,color:'var(--text3)',fontFamily:'var(--font-mono)'}}>v2.2.0 · {new Date().toLocaleDateString('zh-TW')}</div>
+        <div style={{marginTop:8,fontSize:10,color:'var(--text3)',fontFamily:'var(--font-mono)'}}>v2.3.0 · {new Date().toLocaleDateString('zh-TW')}</div>
       </div>
     </aside>
   );

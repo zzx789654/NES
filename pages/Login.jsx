@@ -170,7 +170,7 @@ function LoginPage({ onLogin }) {
         </form>
 
         <div style={{marginTop:16,padding:'10px 12px',background:'var(--surface2)',borderRadius:'var(--rsm)',fontSize:11,color:'var(--text3)'}}>
-          後端帳號：<span style={{fontFamily:'var(--font-mono)',color:'var(--text2)'}}>admin / admin</span>
+          預設帳號：<span style={{fontFamily:'var(--font-mono)',color:'var(--text2)'}}>admin / Admin@123456</span>
         </div>
       </div>
     </div>
