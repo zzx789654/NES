@@ -1,5 +1,6 @@
 #!/bin/bash
 # 同步最新 backend + frontend 程式碼並重啟服務
+# 用法：bash redeploy-backend.sh [SERVER_IP] [--branch <分支>]
 set -euo pipefail
 
 REPO_DIR=$(cd "$(dirname "$0")/.." && pwd)
@@ -7,7 +8,31 @@ BACKEND_DIR=/opt/secvision/backend
 WEB_DIR=/var/www/secvision
 SERVICE_NAME=secvision
 LOCAL_API_URL=http://127.0.0.1:8000
-SERVER_IP=${1:-}
+SERVER_IP=""
+BRANCH=""
+
+# 解析參數
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --branch) BRANCH="$2"; shift 2 ;;
+    *)        SERVER_IP="$1"; shift ;;
+  esac
+done
+
+# ── 拉取最新程式碼 ──────────────────────────────────────────────────────────
+echo "==> Pull latest code from git"
+if git -C "$REPO_DIR" rev-parse --git-dir > /dev/null 2>&1; then
+  if [[ -z "$BRANCH" ]]; then
+    BRANCH=$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+  fi
+  echo "  分支：$BRANCH"
+  git -C "$REPO_DIR" fetch origin "$BRANCH" 2>&1 | sed 's/^/  /'
+  git -C "$REPO_DIR" checkout "$BRANCH"
+  git -C "$REPO_DIR" pull origin "$BRANCH" 2>&1 | sed 's/^/  /'
+  echo "  已更新至 commit: $(git -C "$REPO_DIR" rev-parse --short HEAD)"
+else
+  echo "  ⚠️  非 git 目錄，跳過更新步驟"
+fi
 
 if [[ ! -d "$REPO_DIR/backend" ]]; then
   echo "❌ 找不到來源目錄: $REPO_DIR/backend"
@@ -24,6 +49,7 @@ sudo cp -a "$REPO_DIR/backend/." "$BACKEND_DIR/"
 sudo chown -R secvision:secvision "$BACKEND_DIR"
 
 echo "==> Sync frontend files"
+DEPLOY_VERSION=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)
 sudo mkdir -p "$WEB_DIR"
 sudo cp "$REPO_DIR/index.html" \
         "$REPO_DIR/app.jsx" \
@@ -31,6 +57,8 @@ sudo cp "$REPO_DIR/index.html" \
         "$REPO_DIR/api-client.js" \
         "$WEB_DIR/"
 sudo cp -r "$REPO_DIR/pages" "$WEB_DIR/"
+# 注入 git hash 作為 cache-busting 版本號，強制瀏覽器重新下載更新的 JSX/JS 檔
+sudo sed -i "s/__DEPLOY_VERSION__/${DEPLOY_VERSION}/g" "$WEB_DIR/index.html"
 sudo chown -R www-data:www-data "$WEB_DIR"
 
 echo "==> Deploy nginx site config"

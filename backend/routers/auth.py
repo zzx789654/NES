@@ -10,7 +10,7 @@ from config import settings
 from database import get_db
 from limiter import limiter
 from models.user import User
-from schemas.auth import Token, TokenData, UserCreate, UserOut
+from schemas.auth import Token, TokenData, UserCreate, UserOut, PasswordChange
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
@@ -93,3 +93,42 @@ def register(
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.get("/users", response_model=list[UserOut])
+def list_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    return db.query(User).order_by(User.id).all()
+
+
+@router.delete("/users/{user_id}", status_code=204)
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.delete(user)
+    db.commit()
+
+
+@router.put("/users/{user_id}/password", status_code=204)
+def change_password(
+    user_id: int,
+    body: PasswordChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "admin" and current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.hashed_pw = hash_password(body.new_password)
+    db.commit()
