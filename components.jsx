@@ -161,7 +161,7 @@ function PageHeader({ title, subtitle, actions }) {
 }
 
 // ─── Btn ──────────────────────────────────────────────────────────────────────
-function Btn({ children, onClick, variant='primary', size='md', disabled, style: extraStyle }) {
+function Btn({ children, onClick, variant='primary', size='md', disabled, type='button', style: extraStyle }) {
   const base = {display:'inline-flex',alignItems:'center',gap:6,borderRadius:'var(--rsm)',fontWeight:500,cursor:disabled?'not-allowed':'pointer',opacity:disabled?0.5:1,transition:'all 0.15s',border:'1px solid transparent',whiteSpace:'nowrap',boxShadow:'0 1px 2px oklch(0 0 0 / 0.12)'};
   const sizes = { sm:{padding:'4px 10px',fontSize:12}, md:{padding:'7px 14px',fontSize:13}, lg:{padding:'9px 18px',fontSize:14} };
   const variants = {
@@ -171,7 +171,7 @@ function Btn({ children, onClick, variant='primary', size='md', disabled, style:
     ghost:    { background:'transparent',color:'var(--text2)',border:'1px solid var(--border)' },
   };
   return (
-    <button disabled={disabled} onClick={onClick}
+    <button type={type} disabled={disabled} onClick={onClick}
       style={{...base,...sizes[size],...variants[variant],...extraStyle}}
       onMouseEnter={e=>{ if(!disabled){ if(variant==='primary') e.currentTarget.style.background='var(--accent-h)'; else if(variant==='secondary' || variant==='ghost') { e.currentTarget.style.borderColor='var(--accent)'; e.currentTarget.style.background='var(--accent-bg)'; e.currentTarget.style.color='var(--accent)'; } }}}
       onMouseLeave={e=>{ if(variant==='primary') e.currentTarget.style.background='var(--accent)'; else if(variant==='secondary'){ e.currentTarget.style.borderColor='var(--border-strong)'; e.currentTarget.style.background='var(--surface2)'; e.currentTarget.style.color='var(--text)'; } else if(variant==='ghost'){ e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.background='transparent'; e.currentTarget.style.color='var(--text2)'; } }}>

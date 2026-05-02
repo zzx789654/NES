@@ -1,4 +1,4 @@
-# SecVision ISMS Portal (NES)
+﻿# SecVision ISMS Portal (NES)
 
 SecVision 是一套以 **前端儀表板 + FastAPI 後端 API** 組成的資安管理入口，涵蓋：
 
@@ -112,6 +112,7 @@ API 文件：`http://127.0.0.1:8000/docs`
 ### Dashboard
 
 - `GET /api/dashboard`
+- Dashboard UI 已優化：高風險 KPI 卡片、快速操作按鈕、NIST 合規摘要與資料更新提示
 
 ### IP Groups
 

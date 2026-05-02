@@ -115,6 +115,11 @@ function App() {
   const [page, setPage] = useState(() => localStorage.getItem('secvision_page') || TWEAK_DEFAULTS.defaultPage);
   const [stats, setStats] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
 
   useEffect(() => {
     function handleUnauth() { setIsLoggedIn(false); }
@@ -146,15 +151,37 @@ function App() {
     return <window.LoginPage onLogin={() => setIsLoggedIn(true)} />;
   }
 
-  async function handleChangePassword() {
+  function resetPasswordForm() {
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError('');
+  }
+
+  function openChangePassword() {
+    resetPasswordForm();
+    setChangePasswordOpen(true);
+  }
+
+  async function submitChangePassword(e) {
+    e.preventDefault();
     if (!currentUser) return;
-    const newPassword = window.prompt('請輸入新密碼（至少 8 碼，需含大寫、數字、特殊字元）');
-    if (!newPassword) return;
+    if (!newPassword) {
+      setPasswordError('請輸入新密碼。');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('兩次輸入的新密碼不一致。');
+      return;
+    }
+    setSavingPassword(true);
     try {
       await APIClient.changePassword(currentUser.id, newPassword);
+      setChangePasswordOpen(false);
       alert('✅ 密碼已更新');
     } catch (err) {
-      alert('❌ 變更密碼失敗：' + (err.message || '未知錯誤'));
+      setPasswordError(err.message || '變更密碼失敗，請稍後再試。');
+    } finally {
+      setSavingPassword(false);
     }
   }
 
@@ -174,12 +201,47 @@ function App() {
         setPage={setPage}
         stats={stats}
         currentUser={currentUser}
-        onChangePassword={handleChangePassword}
+        onChangePassword={openChangePassword}
         onLogout={() => { APIClient.logout(); setIsLoggedIn(false); }}
       />
       <main style={{flex:1,overflow:'auto',background:'var(--bg)',padding:'24px 32px'}}>
         <PageComponent onNavigate={setPage} onStatsChange={refreshStats} />
       </main>
+      {changePasswordOpen && (
+        <Modal open={changePasswordOpen} title="變更密碼" onClose={() => setChangePasswordOpen(false)} width={520}>
+          <form onSubmit={submitChangePassword}>
+            <div style={{ display: 'grid', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>新密碼</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="至少 8 碼，含大寫、數字、特殊字元"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--rsm)', border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: 13 }}
+                  autoComplete="new-password"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>確認新密碼</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="再輸入一次新密碼"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--rsm)', border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: 13 }}
+                  autoComplete="new-password"
+                />
+              </div>
+              {passwordError && <div style={{ color: 'var(--critical)', fontSize: 13 }}>{passwordError}</div>}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <Btn type="button" variant="secondary" size="sm" onClick={() => setChangePasswordOpen(false)}>取消</Btn>
+                <Btn type="submit" variant="primary" size="sm" disabled={savingPassword}>{savingPassword ? '儲存中…' : '儲存新密碼'}</Btn>
+              </div>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }
