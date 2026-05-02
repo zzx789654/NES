@@ -104,6 +104,57 @@ def test_host_history(client, admin_token):
     assert data["history"][0]["vuln_count"] >= 1
 
 
+# NESSUS_CSV has Vuln A (plugin 12345, port 443) + Vuln C (plugin 34567, port 22) on 192.168.1.1
+# NESSUS_CSV_2 has only Vuln A (plugin 12345, port 443) on 192.168.1.1
+# Uploading H1 first (older), then H2 (newer):
+#   H2 (newest, index 0): resolved_count=1 (Vuln C gone), new_count=0
+#   H1 (oldest, index 1): new_count=2 (first appearance), resolved_count=0
+NESSUS_CSV_H1 = b"""Plugin ID,CVE,Risk,Host,Port,Protocol,Name,CVSS v3.0 Base Score,Synopsis,Description,Solution,Plugin Output
+12345,CVE-2024-0001,Critical,10.0.0.1,443,TCP,Vuln A,9.8,S,D,F,O
+34567,,Medium,10.0.0.1,22,TCP,Vuln C,5.0,S,D,F,O
+"""
+
+NESSUS_CSV_H2 = b"""Plugin ID,CVE,Risk,Host,Port,Protocol,Name,CVSS v3.0 Base Score,Synopsis,Description,Solution,Plugin Output
+12345,CVE-2024-0001,Critical,10.0.0.1,443,TCP,Vuln A,9.8,S,D,F,O
+56789,CVE-2024-5678,High,10.0.0.1,80,TCP,Vuln New,7.5,S,D,F,O
+"""
+
+
+def test_host_history_vuln_diff(client, admin_token):
+    # H1 uploaded first = older scan, H2 newer
+    _upload(client, admin_token, name="H1", csv=NESSUS_CSV_H1, scan_date="2024-01-01")
+    _upload(client, admin_token, name="H2", csv=NESSUS_CSV_H2, scan_date="2024-02-01")
+
+    resp = client.get("/api/scans/hosts/10.0.0.1/history", headers=auth(admin_token))
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_scans"] == 2
+
+    newest = data["history"][0]  # H2
+    oldest = data["history"][1]  # H1
+
+    # H2 vs H1: Vuln C resolved, Vuln New added
+    assert newest["scan_name"] == "H2"
+    assert newest["new_count"] == 1
+    assert newest["resolved_count"] == 1
+    assert newest["new_vulns"][0]["plugin_id"] == "56789"
+    assert newest["resolved_vulns"][0]["plugin_id"] == "34567"
+
+    # H1 is oldest: all vulns are first appearances
+    assert oldest["scan_name"] == "H1"
+    assert oldest["resolved_count"] == 0
+    assert oldest["new_count"] == 2
+
+
+def test_host_history_single_scan_all_new(client, admin_token):
+    _upload(client, admin_token, name="Only", csv=NESSUS_CSV_H1, scan_date="2024-01-01")
+    resp = client.get("/api/scans/hosts/10.0.0.1/history", headers=auth(admin_token))
+    data = resp.json()
+    entry = data["history"][0]
+    assert entry["new_count"] == 2
+    assert entry["resolved_count"] == 0
+
+
 def test_upload_unsupported_extension(client, admin_token):
     with patch("routers.scans.fetch_epss_scores", new=AsyncMock(return_value={})):
         resp = client.post(

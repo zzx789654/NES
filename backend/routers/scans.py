@@ -9,7 +9,7 @@ from database import get_db
 from limiter import limiter
 from models.scan import Scan, Vulnerability
 from routers.auth import get_current_user, require_role
-from schemas.scan import ScanOut, ScanDetail, ScanDiff, HostHistory
+from schemas.scan import ScanOut, ScanDetail, ScanDiff, HostHistory, VulnerabilityOut
 from services.nessus_parser import parse_nessus_csv
 from services.cve_parser import parse_nvd_json
 from services.diff_service import diff_scans
@@ -61,8 +61,14 @@ def get_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(get_current_
     return scan
 
 
+def _host_vuln_key(v: Vulnerability) -> str:
+    """Unique key for a vulnerability on a single host (excludes host/scan_id)."""
+    return f"{v.plugin_id or ''}|{v.cve or ''}|{v.port or ''}"
+
+
 @router.get("/hosts/{host}/history", response_model=HostHistory)
 def get_host_history(host: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    # Load all scans containing this host, newest first
     scans = (
         db.query(Scan)
         .options(selectinload(Scan.vulnerabilities))
@@ -74,30 +80,47 @@ def get_host_history(host: str, db: Session = Depends(get_db), _=Depends(get_cur
     if not scans:
         raise HTTPException(status_code=404, detail="Host history not found")
 
-    history = []
+    # Build per-scan vuln maps for this host (index 0 = newest scan)
+    scan_vuln_maps = []
+    scan_host_vulns = []
     for scan in scans:
         host_vulns = [v for v in scan.vulnerabilities if v.host == host]
+        scan_host_vulns.append(host_vulns)
+        scan_vuln_maps.append({_host_vuln_key(v): v for v in host_vulns})
+
+    history = []
+    for i, scan in enumerate(scans):
+        host_vulns = scan_host_vulns[i]
+        curr_map = scan_vuln_maps[i]
+
         counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
         for v in host_vulns:
             key = (v.risk or "Info").lower()
             if key in counts:
                 counts[key] += 1
-        history.append(
-            {
-                "scan_id": scan.id,
-                "scan_name": scan.name,
-                "scan_date": scan.scan_date,
-                "uploaded_at": scan.uploaded_at,
-                "vuln_count": len(host_vulns),
-                "critical": counts["critical"],
-                "high": counts["high"],
-                "medium": counts["medium"],
-                "low": counts["low"],
-                "info": counts["info"],
-            }
-        )
 
-    history.sort(key=lambda item: (item["uploaded_at"], item["scan_id"]), reverse=True)
+        if i + 1 < len(scans):
+            # Diff against the chronologically older scan
+            prev_map = scan_vuln_maps[i + 1]
+            new_vulns = [curr_map[k] for k in set(curr_map) - set(prev_map)]
+            resolved_vulns = [prev_map[k] for k in set(prev_map) - set(curr_map)]
+        else:
+            # Oldest scan — every vuln is a first appearance
+            new_vulns = host_vulns
+            resolved_vulns = []
+
+        history.append({
+            "scan_id": scan.id,
+            "scan_name": scan.name,
+            "scan_date": scan.scan_date,
+            "uploaded_at": scan.uploaded_at,
+            "vuln_count": len(host_vulns),
+            **counts,
+            "new_count": len(new_vulns),
+            "resolved_count": len(resolved_vulns),
+            "new_vulns": [VulnerabilityOut.model_validate(v) for v in new_vulns],
+            "resolved_vulns": [VulnerabilityOut.model_validate(v) for v in resolved_vulns],
+        })
 
     return HostHistory(
         host=host,

@@ -1,6 +1,6 @@
 ﻿// Vulnerability Scan Page — API-driven scan list, filters, charts, IP groups, diff, upload
 
-const { useState, useEffect, useMemo, useRef } = React;
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
 const SEV_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3, Info: 4 };
 const SEV_COLOR = {
@@ -147,6 +147,114 @@ function QuadrantChart({ vulns, xKey, yKey, xLabel, yLabel, xMid, yMid, xMax, yM
         ))}
       </div>
     </Card>
+  );
+}
+
+function VulnChangeList({ vulns, resolved }) {
+  const LIMIT = 30;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      {vulns.slice(0, LIMIT).map((v, i) => (
+        <div key={v.id || i} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 10px', background: 'var(--surface2)', borderRadius: 'var(--rsm)', opacity: resolved ? 0.75 : 1 }}>
+          <SeverityBadge level={v.risk || 'Info'} />
+          {v.plugin_id && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text3)', flexShrink: 0 }}>{v.plugin_id}</span>}
+          <span style={{ fontSize: 12, color: resolved ? 'var(--text3)' : 'var(--text)', textDecoration: resolved ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={v.name}>{v.name || '—'}</span>
+          {v.cve && <span style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{v.cve}</span>}
+          {v.cvss_v3_base != null && <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text3)', flexShrink: 0 }}>CVSS {parseFloat(v.cvss_v3_base).toFixed(1)}</span>}
+        </div>
+      ))}
+      {vulns.length > LIMIT && <div style={{ fontSize: 11, color: 'var(--text3)', padding: '3px 10px' }}>…還有 {vulns.length - LIMIT} 筆</div>}
+    </div>
+  );
+}
+
+function HostVulnTimeline({ hostHistory, loading, error }) {
+  const [expandedIdx, setExpandedIdx] = useState(null);
+
+  if (loading) return <div style={{ color: 'var(--text2)', fontSize: 13 }}>載入主機歷程…</div>;
+  if (error) return <div style={{ color: 'var(--critical)', fontSize: 13 }}>{error}</div>;
+  if (!hostHistory?.history?.length) return (
+    <div style={{ color: 'var(--text3)', fontSize: 12, fontStyle: 'italic' }}>
+      目前尚無主機歷程資料，請選擇有漏洞紀錄的主機。
+    </div>
+  );
+
+  const items = hostHistory.history;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {items.map((entry, i) => {
+        const isOldest = i === items.length - 1;
+        const isNewest = i === 0;
+        const hasChanges = !isOldest && (entry.new_count > 0 || entry.resolved_count > 0);
+        const noChange = !isOldest && entry.new_count === 0 && entry.resolved_count === 0;
+        const exp = expandedIdx === i;
+        const dateStr = entry.scan_date || entry.uploaded_at.slice(0, 10);
+
+        return (
+          <div key={entry.scan_id} style={{ background: 'var(--surface2)', border: `1px solid ${isNewest ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 'var(--r)', overflow: 'hidden' }}>
+            <div style={{ padding: '8px 14px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: isNewest ? 'var(--accent)' : isOldest ? 'var(--text3)' : 'var(--border)', flexShrink: 0 }} />
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text3)', flexShrink: 0 }}>{dateStr}</span>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>{entry.scan_name}</span>
+              <span style={{ fontSize: 12, color: 'var(--text2)' }}>· {entry.vuln_count} 弱點</span>
+
+              <div style={{ display: 'flex', gap: 4 }}>
+                {[['critical', 'var(--critical)'], ['high', 'var(--high)'], ['medium', 'var(--medium)'], ['low', 'var(--low)']].map(([k, c]) =>
+                  entry[k] > 0 && (
+                    <span key={k} style={{ padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700, color: c, background: c + '22', fontFamily: 'var(--font-mono)' }}>
+                      {entry[k]}
+                    </span>
+                  )
+                )}
+              </div>
+
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 5, alignItems: 'center' }}>
+                {isOldest && <span style={{ fontSize: 10, color: 'var(--text3)', fontStyle: 'italic' }}>首次掃描</span>}
+                {noChange && <span style={{ fontSize: 10, color: 'var(--text3)' }}>無變化</span>}
+                {entry.new_count > 0 && (
+                  <span style={{ padding: '2px 7px', borderRadius: 4, fontSize: 11, fontWeight: 700, color: 'var(--critical)', background: 'var(--critical-bg)' }}>
+                    +{entry.new_count} 新增
+                  </span>
+                )}
+                {entry.resolved_count > 0 && (
+                  <span style={{ padding: '2px 7px', borderRadius: 4, fontSize: 11, fontWeight: 700, color: 'var(--success)', background: 'var(--success-bg)' }}>
+                    −{entry.resolved_count} 修補
+                  </span>
+                )}
+                {hasChanges && (
+                  <button onClick={() => setExpandedIdx(exp ? null : i)}
+                    style={{ padding: '2px 8px', fontSize: 11, borderRadius: 3, border: `1px solid var(--accent)`, color: 'var(--accent)', background: exp ? 'var(--accent-bg)' : 'none', cursor: 'pointer', flexShrink: 0 }}>
+                    {exp ? '收起 ▲' : '明細 ▼'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {exp && (
+              <div style={{ borderTop: '1px solid var(--border)', padding: '12px 14px', background: 'var(--surface)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {entry.new_count > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--critical)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                      🔴 新增弱點（{entry.new_count}）
+                    </div>
+                    <VulnChangeList vulns={entry.new_vulns} />
+                  </div>
+                )}
+                {entry.resolved_count > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                      🟢 已修補弱點（{entry.resolved_count}）
+                    </div>
+                    <VulnChangeList vulns={entry.resolved_vulns} resolved />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -616,36 +724,41 @@ function VulnScanPage({ onStatsChange }) {
               })}
             </div>
 
-            <Card title="主機歷程" action={hostHistory?.history?.length ? <span style={{ fontSize: 11, color: 'var(--text3)' }}>{hostHistory.history.length} 次掃描紀錄</span> : null}>
+            <Card title="IP 弱點歷程追蹤"
+              action={hostHistory?.history?.length
+                ? <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>{hostHistory.history.length} 次掃描紀錄</span>
+                : null}>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ minWidth: 220 }}>
-                  <select value={historyHost} onChange={e => setHistoryHost(e.target.value)}
-                    style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 'var(--rsm)', padding: '8px 10px', fontSize: 13 }}>
-                    <option value="">選擇主機以查看歷程</option>
-                    {allHosts.map(host => <option key={host} value={host}>{host}</option>)}
-                  </select>
+                <div style={{ position: 'relative', minWidth: 220 }}>
+                  <input
+                    value={historyHost}
+                    onChange={e => setHistoryHost(e.target.value)}
+                    list="history-host-datalist"
+                    placeholder="輸入或選擇主機 IP…"
+                    style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 'var(--rsm)', padding: '8px 10px', fontSize: 13, outline: 'none' }}
+                  />
+                  <datalist id="history-host-datalist">
+                    {allHosts.slice(0, 200).map(h => <option key={h} value={h} />)}
+                  </datalist>
                 </div>
                 {hostHistory && !historyLoading && (
-                  <div style={{ fontSize: 12, color: 'var(--text2)' }}>
-                    首次出現：{hostHistory.first_seen ? hostHistory.first_seen.slice(0, 10) : '—'}
-                    <br />
-                    最近出現：{hostHistory.last_seen ? hostHistory.last_seen.slice(0, 10) : '—'}
+                  <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6 }}>
+                    首次出現：<span style={{ fontFamily: 'var(--font-mono)' }}>{hostHistory.first_seen ? hostHistory.first_seen.slice(0, 10) : '—'}</span>
+                    {' · '}最近出現：<span style={{ fontFamily: 'var(--font-mono)' }}>{hostHistory.last_seen ? hostHistory.last_seen.slice(0, 10) : '—'}</span>
                   </div>
                 )}
+                {hostHistory && !historyLoading && hostHistory.history.length > 1 && (() => {
+                  const totalNew = hostHistory.history.slice(0, -1).reduce((s, e) => s + e.new_count, 0);
+                  const totalResolved = hostHistory.history.slice(0, -1).reduce((s, e) => s + e.resolved_count, 0);
+                  return (
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                      {totalNew > 0 && <span style={{ padding: '3px 10px', borderRadius: 4, fontSize: 12, fontWeight: 700, color: 'var(--critical)', background: 'var(--critical-bg)' }}>累計新增 +{totalNew}</span>}
+                      {totalResolved > 0 && <span style={{ padding: '3px 10px', borderRadius: 4, fontSize: 12, fontWeight: 700, color: 'var(--success)', background: 'var(--success-bg)' }}>累計修補 −{totalResolved}</span>}
+                    </div>
+                  );
+                })()}
               </div>
-              {historyLoading ? (
-                <div style={{ color: 'var(--text2)' }}>載入主機歷程…</div>
-              ) : historyError ? (
-                <div style={{ color: 'var(--critical)' }}>{historyError}</div>
-              ) : hostHistory?.history?.length ? (
-                <Timeline items={hostHistory.history.map(item => ({
-                  type: 'scan',
-                  text: `${item.scan_name} · ${item.vuln_count} 筆弱點`,
-                  date: item.scan_date ? item.scan_date : item.uploaded_at.slice(0, 10),
-                }))} />
-              ) : (
-                <div style={{ color: 'var(--text3)', fontSize: 12 }}>目前尚無主機歷程資料，請選擇有漏洞紀錄的主機。</div>
-              )}
+              <HostVulnTimeline hostHistory={hostHistory} loading={historyLoading} error={historyError} />
             </Card>
 
             <Card noPad>

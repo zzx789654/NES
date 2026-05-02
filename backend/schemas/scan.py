@@ -89,6 +89,10 @@ class HostHistoryEntry(BaseModel):
     medium: int
     low: int
     info: int
+    new_count: int = 0
+    resolved_count: int = 0
+    new_vulns: list[VulnerabilityOut] = []
+    resolved_vulns: list[VulnerabilityOut] = []
 
 
 class HostHistory(BaseModel):
