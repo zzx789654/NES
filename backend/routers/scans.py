@@ -137,23 +137,26 @@ def delete_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(require_r
 async def upload_scan(
     request: Request,
     file: UploadFile = File(...),
-    name: str = Form(...),
+    name: str | None = Form(None),
     scan_date: str = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("admin", "analyst")),
 ):
     content = await file.read()
-    filename = file.filename or ""
+    filename = (file.filename or "").strip()
+    filename_lower = filename.lower()
+    if not name:
+        name = filename or "Uploaded Scan"
 
     # File size guard
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File too large. Maximum allowed size is 50 MB")
 
     # Basic content sanity check
-    if filename.endswith(".csv"):
+    if filename_lower.endswith(".csv"):
         if not content or content[:1] not in (b'"', b"'") and not (32 <= content[0] <= 126):
             raise HTTPException(status_code=400, detail="Invalid CSV content")
-    elif filename.endswith(".json"):
+    elif filename_lower.endswith(".json"):
         stripped = content.lstrip()
         if not stripped or stripped[:1] not in (b"{", b"["):
             raise HTTPException(status_code=400, detail="Invalid JSON content")
@@ -167,12 +170,12 @@ async def upload_scan(
         except ValueError:
             pass
 
-    if filename.endswith(".csv"):
+    if filename_lower.endswith(".csv"):
         try:
             parsed = parse_nessus_csv(content, name, parsed_date)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
-    elif filename.endswith(".json"):
+    elif filename_lower.endswith(".json"):
         try:
             parsed = parse_nvd_json(content, name, parsed_date)
         except ValueError as exc:

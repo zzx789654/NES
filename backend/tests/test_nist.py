@@ -43,6 +43,28 @@ def test_upload_audit(client, admin_token):
     assert data["warning"] == 1
 
 
+def test_upload_audit_uppercase_extension(client, admin_token):
+    resp = client.post(
+        "/api/nist/upload",
+        data={"name": "Uppercase Audit", "scan_date": "2024-03-01"},
+        files={"file": ("audit.CSV", io.BytesIO(AUDIT_CSV), "text/csv")},
+        headers=auth(admin_token),
+    )
+    assert resp.status_code == 201
+    assert resp.json()["name"] == "Uppercase Audit"
+
+
+def test_upload_audit_uses_filename_when_name_is_missing(client, admin_token):
+    resp = client.post(
+        "/api/nist/upload",
+        data={"scan_date": "2024-03-01"},
+        files={"file": ("missing_name.csv", io.BytesIO(AUDIT_CSV), "text/csv")},
+        headers=auth(admin_token),
+    )
+    assert resp.status_code == 201
+    assert resp.json()["name"] == "missing_name.csv"
+
+
 def test_get_audit_detail(client, admin_token):
     scan_id = _upload(client, admin_token).json()["id"]
     resp = client.get(f"/api/nist/scans/{scan_id}", headers=auth(admin_token))

@@ -43,6 +43,30 @@ def test_upload_scan(client, admin_token):
     assert data["host_count"] == 2
 
 
+def test_upload_scan_uppercase_extension(client, admin_token):
+    with patch("routers.scans.fetch_epss_scores", new=AsyncMock(return_value=_EPSS_MOCK)):
+        resp = client.post(
+            "/api/scans/upload",
+            data={"name": "Uppercase Scan", "scan_date": "2024-01-15"},
+            files={"file": ("scan.CSV", io.BytesIO(NESSUS_CSV), "text/csv")},
+            headers=auth(admin_token),
+        )
+    assert resp.status_code == 201
+    assert resp.json()["name"] == "Uppercase Scan"
+
+
+def test_upload_scan_uses_filename_when_name_is_missing(client, admin_token):
+    with patch("routers.scans.fetch_epss_scores", new=AsyncMock(return_value=_EPSS_MOCK)):
+        resp = client.post(
+            "/api/scans/upload",
+            data={"scan_date": "2024-01-15"},
+            files={"file": ("upload_me.csv", io.BytesIO(NESSUS_CSV), "text/csv")},
+            headers=auth(admin_token),
+        )
+    assert resp.status_code == 201
+    assert resp.json()["name"] == "upload_me.csv"
+
+
 def test_list_scans_after_upload(client, admin_token):
     _upload(client, admin_token)
     resp = client.get("/api/scans", headers=auth(admin_token))

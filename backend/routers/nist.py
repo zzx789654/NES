@@ -60,19 +60,22 @@ def delete_audit_scan(
 async def upload_audit(
     request: Request,
     file: UploadFile = File(...),
-    name: str = Form(...),
+    name: str | None = Form(None),
     scan_date: str = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("admin", "analyst")),
 ):
     content = await file.read()
-    filename = file.filename or ""
+    filename = (file.filename or "").strip()
+    filename_lower = filename.lower()
+    if not name:
+        name = filename or "Uploaded Audit"
 
     # File size guard
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File too large. Maximum allowed size is 50 MB")
 
-    if not filename.endswith(".csv"):
+    if not filename_lower.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only .csv files are supported")
 
     # Basic CSV content sanity check
