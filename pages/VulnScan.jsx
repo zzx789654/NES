@@ -343,15 +343,25 @@ function VulnScanPage({ onStatsChange }) {
     setLoading(true);
     return APIClient.getAllScans()
       .then(list => {
-        setScans(list);
+        const sorted = [...list].sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at));
+        setScans(sorted);
         setError('');
         setLoading(false);
-        if (!selectedId && list.length > 0) {
-          setSelectedId(list[0].id);
+        if (sorted.length > 0) {
+          const latestId = sorted[0].id;
+          if (!selectedId) {
+            setSelectedId(latestId);
+          }
+          if (!detail || detail.id !== latestId) {
+            loadScanDetail(latestId);
+          }
+        } else {
+          setSelectedId(null);
+          setDetail(null);
         }
-        if (list.length > 1 && diffBase === null && diffComp === null) {
-          setDiffBase(list[0].id);
-          setDiffComp(list[1].id);
+        if (sorted.length > 1 && diffBase === null && diffComp === null) {
+          setDiffBase(sorted[0].id);
+          setDiffComp(sorted[1].id);
         }
       })
       .catch(err => {
