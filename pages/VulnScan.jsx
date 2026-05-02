@@ -150,11 +150,14 @@ function QuadrantChart({ vulns, xKey, yKey, xLabel, yLabel, xMid, yMid, xMax, yM
   );
 }
 
+const PILL_LIMIT = 60;
+
 function IPGroupManager({ allHosts, selectedIPs, onSelectIPs }) {
   const [groups, setGroups] = useState([]);
   const [newGroupName, setNewGroupName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [ipSearch, setIpSearch] = useState('');
 
   const loadGroups = () => {
     setLoading(true);
@@ -194,32 +197,69 @@ function IPGroupManager({ allHosts, selectedIPs, onSelectIPs }) {
     prev.includes(ip) ? prev.filter(x => x !== ip) : [...prev, ip]
   );
 
+  const filteredHosts = useMemo(() => {
+    const q = ipSearch.trim().toLowerCase();
+    if (!q) return allHosts;
+    return allHosts.filter(h => h.toLowerCase().includes(q));
+  }, [allHosts, ipSearch]);
+
+  const visiblePills = filteredHosts.slice(0, PILL_LIMIT);
+  const hiddenCount = filteredHosts.length - visiblePills.length;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10 }}>
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '12px' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 8 }}>
-            IP 篩選 / 選擇主機（{selectedIPs.length} 已選）
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text3)' }}>
+              IP 篩選 / 選擇主機（{selectedIPs.length} 已選，共 {allHosts.length}）
+            </div>
+            {allHosts.length > 20 && (
+              <input
+                value={ipSearch}
+                onChange={e => setIpSearch(e.target.value)}
+                placeholder="搜尋 IP…"
+                style={{ marginLeft: 'auto', width: 150, padding: '3px 8px', fontSize: 12, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--rsm)', color: 'var(--text)', outline: 'none' }}
+              />
+            )}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 120, overflow: 'auto' }}>
             {allHosts.length === 0 ? (
               <div style={{ color: 'var(--text3)', fontSize: 12 }}>此掃描尚無主機資料</div>
-            ) : allHosts.map(host => {
-              const sel = selectedIPs.includes(host);
-              return (
-                <button key={host} onClick={() => toggleIP(host)}
-                  style={{ padding: '5px 10px', borderRadius: 999, fontSize: 12, fontFamily: 'var(--font-mono)', cursor: 'pointer', border: `1px solid ${sel ? 'var(--accent)' : 'var(--border)'}`, background: sel ? 'var(--accent-bg)' : 'var(--surface2)', color: sel ? 'var(--accent)' : 'var(--text2)', transition: 'all 0.12s', fontWeight: sel ? 700 : 400 }}>
-                  {host}
-                </button>
-              );
-            })}
+            ) : visiblePills.length === 0 ? (
+              <div style={{ color: 'var(--text3)', fontSize: 12 }}>無符合的主機</div>
+            ) : (
+              <>
+                {visiblePills.map(host => {
+                  const sel = selectedIPs.includes(host);
+                  return (
+                    <button key={host} onClick={() => toggleIP(host)}
+                      style={{ padding: '5px 10px', borderRadius: 999, fontSize: 12, fontFamily: 'var(--font-mono)', cursor: 'pointer', border: `1px solid ${sel ? 'var(--accent)' : 'var(--border)'}`, background: sel ? 'var(--accent-bg)' : 'var(--surface2)', color: sel ? 'var(--accent)' : 'var(--text2)', transition: 'all 0.12s', fontWeight: sel ? 700 : 400 }}>
+                      {host}
+                    </button>
+                  );
+                })}
+                {hiddenCount > 0 && (
+                  <div style={{ padding: '5px 10px', fontSize: 11, color: 'var(--text3)', fontStyle: 'italic', alignSelf: 'center' }}>
+                    +{hiddenCount} 更多，請縮小搜尋範圍
+                  </div>
+                )}
+              </>
+            )}
           </div>
-          {selectedIPs.length > 0 && (
-            <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {selectedIPs.length > 0 && (
               <button onClick={() => onSelectIPs([])} style={{ fontSize: 11, color: 'var(--text3)', cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline' }}>清除全部</button>
-              <button onClick={() => onSelectIPs(allHosts)} style={{ fontSize: 11, color: 'var(--text3)', cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline' }}>全選</button>
-            </div>
-          )}
+            )}
+            <button onClick={() => onSelectIPs(allHosts)} style={{ fontSize: 11, color: 'var(--text3)', cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline' }}>全選</button>
+            {ipSearch.trim() && filteredHosts.length > 0 && filteredHosts.length < allHosts.length && (
+              <button
+                onClick={() => onSelectIPs(prev => [...new Set([...prev, ...filteredHosts])])}
+                style={{ fontSize: 11, color: 'var(--accent)', cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline' }}>
+                選擇符合 ({filteredHosts.length})
+              </button>
+            )}
+          </div>
         </div>
 
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '12px', minWidth: 260 }}>
@@ -270,8 +310,14 @@ function VulnScanPage({ onStatsChange }) {
   const [hostHistory, setHostHistory] = useState(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [sevFilter, setSevFilter] = useState('all');
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 260);
+    return () => clearTimeout(t);
+  }, [searchInput]);
   const [visibleCols, setVisibleCols] = useState(['risk', 'host', 'port', 'plugin_id', 'name', 'cve', 'cvss_v3_base', 'epss', 'vpr']);
   const [expandedRow, setExpandedRow] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -433,6 +479,10 @@ function VulnScanPage({ onStatsChange }) {
   }, [diffData]);
 
   const [diffFilter, setDiffFilter] = useState('all');
+  const [diffPage, setDiffPage] = useState(0);
+  const DIFF_PAGE_SIZE = 100;
+
+  useEffect(() => { setDiffPage(0); }, [diffFilter, search, selectedIPs]);
   const filteredDiff = useMemo(() => {
     return diffRows
       .filter(row => diffFilter === 'all' || row.status === diffFilter)
@@ -505,7 +555,7 @@ function VulnScanPage({ onStatsChange }) {
 
       <Tabs
         active={tab}
-        onChange={t => { setTab(t); setError(''); setSearch(''); setSevFilter('all'); }}
+        onChange={t => { setTab(t); setError(''); setSearchInput(''); setSearch(''); setSevFilter('all'); }}
         tabs={[
           { id: 'history', label: '掃描結果', icon: '📋', count: selectedScan?.vuln_count ?? 0 },
           { id: 'matrix', label: '風險矩陣', icon: '⊞' },
@@ -533,7 +583,7 @@ function VulnScanPage({ onStatsChange }) {
                 <option value="all">全部等級</option>
                 {['Critical', 'High', 'Medium', 'Low', 'Info'].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
-              <SearchBar value={search} onChange={setSearch} placeholder="搜尋 IP / 弱點名稱 / CVE…" />
+              <SearchBar value={searchInput} onChange={setSearchInput} placeholder="搜尋 IP / 弱點名稱 / CVE…" />
               <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text2)', fontFamily: 'var(--font-mono)' }}>
                 {filteredVulns.length} 筆{selectedIPs.length > 0 ? ` · ${selectedIPs.length} IP 篩選中` : ''}
               </span>
@@ -599,7 +649,7 @@ function VulnScanPage({ onStatsChange }) {
             </Card>
 
             <Card noPad>
-              <DataTable columns={columns} rows={filteredVulns} maxHeight={520} onRowClick={row => setExpandedRow(expandedRow?.id === row.id ? null : row)} />
+              <DataTable columns={columns} rows={filteredVulns} maxHeight={520} pageSize={100} onRowClick={row => setExpandedRow(expandedRow?.id === row.id ? null : row)} />
             </Card>
 
             {expandedRow && (
@@ -713,7 +763,7 @@ function VulnScanPage({ onStatsChange }) {
                   {scans.map(scan => <option key={scan.id} value={scan.id}>{scan.name}</option>)}
                 </select>
               </div>
-              <SearchBar value={search} onChange={setSearch} placeholder="搜尋 IP / 弱點名稱 / CVE…" />
+              <SearchBar value={searchInput} onChange={setSearchInput} placeholder="搜尋 IP / 弱點名稱 / CVE…" />
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {[
@@ -742,7 +792,7 @@ function VulnScanPage({ onStatsChange }) {
                   <tbody>
                     {filteredDiff.length === 0 ? (
                       <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: 'var(--text3)', fontStyle: 'italic' }}>無符合條件的記錄</td></tr>
-                    ) : filteredDiff.map((row, index) => {
+                    ) : filteredDiff.slice(diffPage * DIFF_PAGE_SIZE, (diffPage + 1) * DIFF_PAGE_SIZE).map((row, index) => {
                       const bg = row.status === 'new' ? 'var(--diff-new)' : row.status === 'resolved' ? 'var(--diff-resolved)' : 'transparent';
                       const label = row.status === 'new' ? '🔴 新增' : row.status === 'resolved' ? '🟢 已解決' : '🔵 持續';
                       const epssVal = row.epss != null ? parseFloat(row.epss) : null;
@@ -767,6 +817,27 @@ function VulnScanPage({ onStatsChange }) {
                   </tbody>
                 </table>
               </div>
+              {filteredDiff.length > DIFF_PAGE_SIZE && (() => {
+                const totalDiffPages = Math.ceil(filteredDiff.length / DIFF_PAGE_SIZE);
+                const safeDiffPage = Math.min(diffPage, totalDiffPages - 1);
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', borderTop: '1px solid var(--border)', background: 'var(--surface2)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
+                      第 {safeDiffPage + 1} / {totalDiffPages} 頁 · 共 {filteredDiff.length} 筆
+                    </span>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => setDiffPage(0)} disabled={safeDiffPage === 0}
+                        style={{ padding: '4px 8px', fontSize: 12, borderRadius: 'var(--rsm)', border: '1px solid var(--border)', background: 'var(--surface)', color: safeDiffPage === 0 ? 'var(--text3)' : 'var(--text)', cursor: safeDiffPage === 0 ? 'default' : 'pointer' }}>«</button>
+                      <button onClick={() => setDiffPage(p => Math.max(0, p - 1))} disabled={safeDiffPage === 0}
+                        style={{ padding: '4px 10px', fontSize: 12, borderRadius: 'var(--rsm)', border: '1px solid var(--border)', background: 'var(--surface)', color: safeDiffPage === 0 ? 'var(--text3)' : 'var(--text)', cursor: safeDiffPage === 0 ? 'default' : 'pointer' }}>‹ 上頁</button>
+                      <button onClick={() => setDiffPage(p => Math.min(totalDiffPages - 1, p + 1))} disabled={safeDiffPage === totalDiffPages - 1}
+                        style={{ padding: '4px 10px', fontSize: 12, borderRadius: 'var(--rsm)', border: '1px solid var(--border)', background: 'var(--surface)', color: safeDiffPage === totalDiffPages - 1 ? 'var(--text3)' : 'var(--text)', cursor: safeDiffPage === totalDiffPages - 1 ? 'default' : 'pointer' }}>下頁 ›</button>
+                      <button onClick={() => setDiffPage(totalDiffPages - 1)} disabled={safeDiffPage === totalDiffPages - 1}
+                        style={{ padding: '4px 8px', fontSize: 12, borderRadius: 'var(--rsm)', border: '1px solid var(--border)', background: 'var(--surface)', color: safeDiffPage === totalDiffPages - 1 ? 'var(--text3)' : 'var(--text)', cursor: safeDiffPage === totalDiffPages - 1 ? 'default' : 'pointer' }}>»</button>
+                    </div>
+                  </div>
+                );
+              })()}
             </Card>
           </div>
         )}

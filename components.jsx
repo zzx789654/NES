@@ -196,9 +196,12 @@ function Card({ children, style: extra, title, action, noPad }) {
 }
 
 // ─── DataTable ────────────────────────────────────────────────────────────────
-function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeight, compact }) {
+function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeight, compact, pageSize }) {
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
+  const [page, setPage] = useState(0);
+
+  React.useEffect(() => { setPage(0); }, [rows]);
 
   const sorted = React.useMemo(() => {
     if (!sortCol) return rows;
@@ -209,6 +212,10 @@ function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeig
     });
   }, [rows, sortCol, sortDir]);
 
+  const totalPages = pageSize ? Math.max(1, Math.ceil(sorted.length / pageSize)) : 1;
+  const safePage = Math.min(page, totalPages - 1);
+  const paged = pageSize ? sorted.slice(safePage * pageSize, (safePage + 1) * pageSize) : sorted;
+
   const handleSort = col => {
     if (!col.sortable) return;
     if (sortCol === col.key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -218,36 +225,55 @@ function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeig
   const cellPad = compact ? '6px 12px' : '10px 14px';
 
   return (
-    <div style={{overflow:'auto',maxHeight}}>
-      <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
-        <thead>
-          <tr>
-            {columns.map(col => (
-              <th key={col.key} onClick={() => handleSort(col)}
-                style={{padding:cellPad,textAlign:'left',fontWeight:600,fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text2)',background:'var(--surface2)',borderBottom:'1px solid var(--border)',cursor:col.sortable?'pointer':'default',whiteSpace:'nowrap',position:'sticky',top:0}}>
-                {col.label}{col.sortable && (sortCol===col.key ? (sortDir==='asc'?' ↑':' ↓') : ' ↕')}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.length === 0
-            ? <tr><td colSpan={columns.length} style={{padding:'32px',textAlign:'center',color:'var(--text3)',fontStyle:'italic'}}>{emptyText}</td></tr>
-            : sorted.map((row, i) => (
-              <tr key={row.id || i} onClick={() => onRowClick && onRowClick(row)}
-                style={{borderBottom:'1px solid var(--border)',cursor:onRowClick?'pointer':'default',transition:'background 0.1s'}}
-                onMouseEnter={e=>e.currentTarget.style.background='var(--surface2)'}
-                onMouseLeave={e=>e.currentTarget.style.background=''}>
-                {columns.map(col => (
-                  <td key={col.key} style={{padding:cellPad,verticalAlign:'middle',color:'var(--text)',fontFamily:col.mono?'var(--font-mono)':'var(--font-sans)',fontSize:col.mono?12:13,maxWidth:col.maxWidth||'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:col.wrap?'normal':'nowrap'}}>
-                    {col.render ? col.render(row[col.key], row) : (row[col.key] ?? '—')}
-                  </td>
-                ))}
-              </tr>
-            ))
-          }
-        </tbody>
-      </table>
+    <div>
+      <div style={{overflow:'auto',maxHeight}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+          <thead>
+            <tr>
+              {columns.map(col => (
+                <th key={col.key} onClick={() => handleSort(col)}
+                  style={{padding:cellPad,textAlign:'left',fontWeight:600,fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text2)',background:'var(--surface2)',borderBottom:'1px solid var(--border)',cursor:col.sortable?'pointer':'default',whiteSpace:'nowrap',position:'sticky',top:0}}>
+                  {col.label}{col.sortable && (sortCol===col.key ? (sortDir==='asc'?' ↑':' ↓') : ' ↕')}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {paged.length === 0
+              ? <tr><td colSpan={columns.length} style={{padding:'32px',textAlign:'center',color:'var(--text3)',fontStyle:'italic'}}>{emptyText}</td></tr>
+              : paged.map((row, i) => (
+                <tr key={row.id || i} onClick={() => onRowClick && onRowClick(row)}
+                  style={{borderBottom:'1px solid var(--border)',cursor:onRowClick?'pointer':'default',transition:'background 0.1s'}}
+                  onMouseEnter={e=>e.currentTarget.style.background='var(--surface2)'}
+                  onMouseLeave={e=>e.currentTarget.style.background=''}>
+                  {columns.map(col => (
+                    <td key={col.key} style={{padding:cellPad,verticalAlign:'middle',color:'var(--text)',fontFamily:col.mono?'var(--font-mono)':'var(--font-sans)',fontSize:col.mono?12:13,maxWidth:col.maxWidth||'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:col.wrap?'normal':'nowrap'}}>
+                      {col.render ? col.render(row[col.key], row) : (row[col.key] ?? '—')}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+      {pageSize && totalPages > 1 && (
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 14px',borderTop:'1px solid var(--border)',background:'var(--surface2)'}}>
+          <span style={{fontSize:12,color:'var(--text3)',fontFamily:'var(--font-mono)'}}>
+            第 {safePage + 1} / {totalPages} 頁 · 共 {sorted.length} 筆
+          </span>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={() => setPage(0)} disabled={safePage === 0}
+              style={{padding:'4px 8px',fontSize:12,borderRadius:'var(--rsm)',border:'1px solid var(--border)',background:'var(--surface)',color:safePage===0?'var(--text3)':'var(--text)',cursor:safePage===0?'default':'pointer'}}>«</button>
+            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={safePage === 0}
+              style={{padding:'4px 10px',fontSize:12,borderRadius:'var(--rsm)',border:'1px solid var(--border)',background:'var(--surface)',color:safePage===0?'var(--text3)':'var(--text)',cursor:safePage===0?'default':'pointer'}}>‹ 上頁</button>
+            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={safePage === totalPages - 1}
+              style={{padding:'4px 10px',fontSize:12,borderRadius:'var(--rsm)',border:'1px solid var(--border)',background:'var(--surface)',color:safePage===totalPages-1?'var(--text3)':'var(--text)',cursor:safePage===totalPages-1?'default':'pointer'}}>下頁 ›</button>
+            <button onClick={() => setPage(totalPages - 1)} disabled={safePage === totalPages - 1}
+              style={{padding:'4px 8px',fontSize:12,borderRadius:'var(--rsm)',border:'1px solid var(--border)',background:'var(--surface)',color:safePage===totalPages-1?'var(--text3)':'var(--text)',cursor:safePage===totalPages-1?'default':'pointer'}}>»</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
