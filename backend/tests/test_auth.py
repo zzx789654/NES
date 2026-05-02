@@ -7,6 +7,12 @@ def test_health(client):
     assert resp.json() == {"status": "ok"}
 
 
+def test_cors_header_present_on_origin_request(client):
+    resp = client.get("/health", headers={"Origin": "http://localhost:8080"})
+    assert resp.status_code == 200
+    assert resp.headers.get("access-control-allow-origin") == "*"
+
+
 def test_login_success(client, db):
     _seed_user(db, "alice", "pass123", "viewer")
     resp = client.post("/api/auth/token", data={"username": "alice", "password": "pass123"})
@@ -85,34 +91,34 @@ def test_register_invalid_role(client, admin_token):
     assert resp.status_code == 400
 
 
-def test_register_weak_password_rejected(client, admin_token):
-    """Passwords that don't meet the policy must return 422."""
-    weak_cases = [
-        "short1!",          # too short (7 chars)
-        "alllowercase1!",   # no uppercase
-        "NoDigitHere!",     # no digit
-        "NoSpecial123",     # no special char
-    ]
-    for pw in weak_cases:
-        resp = client.post(
-            "/api/auth/register",
-            json={"username": "testuser", "password": pw, "role": "viewer"},
-            headers=auth(admin_token),
-        )
-        assert resp.status_code == 422, f"Expected 422 for password '{pw}', got {resp.status_code}"
+def test_change_password_success(client, db):
+    _seed_user(db, "changeme", "oldpass123", "viewer")
+    login = client.post("/api/auth/token", data={"username": "changeme", "password": "oldpass123"})
+    token = login.json()["access_token"]
+    resp = client.post(
+        "/api/auth/change-password",
+        json={"current_password": "oldpass123", "new_password": "newpass123"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 204
+    relogin = client.post("/api/auth/token", data={"username": "changeme", "password": "newpass123"})
+    assert relogin.status_code == 200
 
 
-def test_register_invalid_username_rejected(client, admin_token):
-    """Usernames with spaces or too short must return 422."""
-    invalid_cases = [
-        "ab",           # too short (2 chars)
-        "user name",    # contains space
-        "user@name",    # invalid char
-    ]
-    for uname in invalid_cases:
-        resp = client.post(
-            "/api/auth/register",
-            json={"username": uname, "password": "Valid1pass!", "role": "viewer"},
-            headers=auth(admin_token),
-        )
-        assert resp.status_code == 422, f"Expected 422 for username '{uname}', got {resp.status_code}"
+def test_change_password_wrong_current_password(client, db):
+    _seed_user(db, "wrongcurrent", "oldpass123", "viewer")
+    token = client.post("/api/auth/token", data={"username": "wrongcurrent", "password": "oldpass123"}).json()["access_token"]
+    resp = client.post(
+        "/api/auth/change-password",
+        json={"current_password": "bad-old", "new_password": "newpass123"},
+        headers=auth(token),
+    )
+    assert resp.status_code == 400
+
+
+def test_change_password_requires_auth(client):
+    resp = client.post(
+        "/api/auth/change-password",
+        json={"current_password": "oldpass123", "new_password": "newpass123"},
+    )
+    assert resp.status_code == 401

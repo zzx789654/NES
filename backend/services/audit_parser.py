@@ -29,6 +29,14 @@ def parse_audit_csv(content: bytes, scan_name: str, scan_date: date | None = Non
     policy_col = col(["Policy Value", "Expected Value", "policy_value"])
     actual_col = col(["Actual Value", "actual_value"])
 
+    missing = []
+    if not check_col:
+        missing.append("check_name")
+    if not status_col:
+        missing.append("status")
+    if missing:
+        raise ValueError(f"Missing required audit columns: {', '.join(missing)}")
+
     results = []
     for _, row in df.iterrows():
         def g(c, _row=row):

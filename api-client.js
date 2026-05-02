@@ -36,6 +36,24 @@ const APIClient = (() => {
     return res.json();
   }
 
+  async function reqForm(path, formData) {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: formData,
+    });
+    if (res.status === 401) {
+      sessionStorage.removeItem(TOKEN_KEY);
+      window.dispatchEvent(new CustomEvent('secvision:unauthorized'));
+      throw new Error('未授權，請重新登入');
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + res.status);
+    }
+    return res.json();
+  }
+
   return {
     // ─── Auth ────────────────────────────────────────────────────────────────
 
@@ -43,30 +61,8 @@ const APIClient = (() => {
       return !!getToken();
     },
 
-    getMe() {
-      return req('/api/auth/me');
-    },
-
-    getUsers() {
-      return req('/api/auth/users');
-    },
-
-    createUser(username, password, role) {
-      return req('/api/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({ username, password, role }),
-      });
-    },
-
-    deleteUser(id) {
-      return req('/api/auth/users/' + id, { method: 'DELETE' });
-    },
-
-    changePassword(userId, newPassword) {
-      return req('/api/auth/users/' + userId + '/password', {
-        method: 'PUT',
-        body: JSON.stringify({ new_password: newPassword }),
-      });
+    isDemoMode() {
+      return getToken() === '__demo__';
     },
 
     async login(username, password) {
@@ -87,6 +83,13 @@ const APIClient = (() => {
 
     logout() {
       sessionStorage.removeItem(TOKEN_KEY);
+    },
+
+    changePassword(currentPassword, newPassword) {
+      return req('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      });
     },
 
     // ─── Dashboard ───────────────────────────────────────────────────────────
@@ -121,22 +124,7 @@ const APIClient = (() => {
       const form = new FormData();
       form.append('file', file);
       if (name) form.append('name', name);
-      return fetch('/api/scans/upload', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: form,
-      }).then(async res => {
-        if (res.status === 401) {
-          sessionStorage.removeItem(TOKEN_KEY);
-          window.dispatchEvent(new CustomEvent('secvision:unauthorized'));
-          throw new Error('未授權，請重新登入');
-        }
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || 'HTTP ' + res.status);
-        }
-        return res.json();
-      });
+      return reqForm('/api/scans/upload', form);
     },
 
     // ─── NIST Audit ──────────────────────────────────────────────────────────
@@ -161,22 +149,7 @@ const APIClient = (() => {
       const form = new FormData();
       form.append('file', file);
       if (name) form.append('name', name);
-      return fetch('/api/nist/upload', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: form,
-      }).then(async res => {
-        if (res.status === 401) {
-          sessionStorage.removeItem(TOKEN_KEY);
-          window.dispatchEvent(new CustomEvent('secvision:unauthorized'));
-          throw new Error('未授權，請重新登入');
-        }
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || 'HTTP ' + res.status);
-        }
-        return res.json();
-      });
+      return reqForm('/api/nist/upload', form);
     },
 
     // ─── IP Groups ───────────────────────────────────────────────────────────

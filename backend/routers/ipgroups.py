@@ -40,6 +40,13 @@ def update_group(
     if not group:
         raise HTTPException(status_code=404, detail="IP group not found")
     if body.name is not None:
+        dup = (
+            db.query(IPGroup)
+            .filter(IPGroup.name == body.name, IPGroup.id != group_id)
+            .first()
+        )
+        if dup:
+            raise HTTPException(status_code=409, detail="Group name already exists")
         group.name = body.name
     if body.ips is not None:
         group.ips = body.ips

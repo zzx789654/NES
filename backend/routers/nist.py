@@ -86,7 +86,10 @@ async def upload_audit(
         except ValueError:
             pass
 
-    parsed = parse_audit_csv(content, name, parsed_date)
+    try:
+        parsed = parse_audit_csv(content, name, parsed_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     scan = AuditScan(
         name=parsed["name"],

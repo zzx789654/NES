@@ -12,8 +12,9 @@ ADMIN_PASS=${ADMIN_PASS:-Admin@123456}
 
 # ── 預設值（可透過參數覆蓋）────────────────────────────────────────────────────
 DB_PASS="changeme_$(openssl rand -hex 6)"
-ADMIN_PASS="Admin$(openssl rand -hex 4)"
-BRANCH=""
+if [[ -z "${ADMIN_PASS:-}" ]]; then
+  ADMIN_PASS="Admin$(openssl rand -hex 4)"
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -52,8 +53,10 @@ sudo apt update && sudo apt install -y \
 
 echo ""
 echo "=== 2. 建立 PostgreSQL 資料庫 ==="
+SECVISION_DB_URL="postgresql+psycopg2://secvision:${DB_PASS}@127.0.0.1:5432/secvision"
 sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='secvision'" | grep -q 1 || \
-    sudo -u postgres psql -c "CREATE USER secvision WITH PASSWORD 'changeme';"
+    sudo -u postgres psql -c "CREATE USER secvision WITH PASSWORD '${DB_PASS}';"
+sudo -u postgres psql -c "ALTER USER secvision WITH PASSWORD '${DB_PASS}';"
 sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='secvision'" | grep -q 1 || \
     sudo -u postgres psql -c "CREATE DATABASE secvision OWNER secvision;"
 
@@ -63,10 +66,20 @@ id -u secvision &>/dev/null || sudo useradd -r -s /bin/false -d "${APP_DIR}" sec
 
 echo ""
 echo "=== 4. 部署後端 ==="
-sudo mkdir -p $APP_DIR
-sudo cp -r "$REPO_DIR/backend" $APP_DIR/
+sudo mkdir -p "$APP_DIR/backend"
+sudo cp -a "$REPO_DIR/backend/." "$APP_DIR/backend/"
 sudo python3.12 -m venv $APP_DIR/venv
-sudo $APP_DIR/venv/bin/pip install -q -r $APP_DIR/backend/requirements.txt
+sudo "$APP_DIR/venv/bin/python" -m pip install --upgrade pip
+sudo "$APP_DIR/venv/bin/pip" install -q -r "$APP_DIR/backend/requirements.txt"
+
+echo "=== 4-1. 產生後端 .env ==="
+sudo tee "$APP_DIR/backend/.env" >/dev/null <<ENVEOF
+DATABASE_URL=${SECVISION_DB_URL}
+SECRET_KEY=$(openssl rand -hex 32)
+ACCESS_TOKEN_EXPIRE_MINUTES=480
+ALGORITHM=HS256
+ALLOWED_ORIGINS=http://${SERVER_IP},http://localhost,http://127.0.0.1
+ENVEOF
 sudo chown -R secvision:secvision $APP_DIR
 
 echo "=== 5. 初始化資料庫 Schema ==="
@@ -137,6 +150,13 @@ else
   echo "   請檢查：sudo journalctl -u secvision -n 120 --no-pager"
 fi
 
+echo "=== 11. 核心 API Smoke Test ==="
+if sudo bash "$REPO_DIR/deploy/smoke-test.sh" "http://127.0.0.1:8000" "$ADMIN_USER" "$ADMIN_PASS"; then
+  echo "✅ 核心功能 Smoke Test 成功"
+else
+  echo "⚠️  Smoke Test 失敗，請檢查服務與日誌"
+fi
+
 echo ""
 echo "✅ 部署完成！"
 echo "   前端：http://${SERVER_IP}"
@@ -146,5 +166,4 @@ echo "🔐 預設管理者帳號已建立"
 echo "   username: ${ADMIN_USER}"
 echo "   password: ${ADMIN_PASS}"
 echo "⚠️  安裝完成後請立即變更預設密碼"
-echo "⚠️  請記得修改 /opt/secvision/backend/.env 中的資料庫密碼與 SECRET_KEY"
-
+echo "⚠️  請記得檢查 /opt/secvision/backend/.env 的資料庫密碼、SECRET_KEY 與 ALLOWED_ORIGINS"

@@ -107,6 +107,18 @@ def test_upload_non_csv_rejected(client, admin_token):
     assert resp.status_code == 400
 
 
+def test_upload_audit_missing_required_columns(client, admin_token):
+    bad_csv = b"Description,Policy Value\\nfoo,bar\\n"
+    resp = client.post(
+        "/api/nist/upload",
+        data={"name": "Bad Audit"},
+        files={"file": ("audit.csv", io.BytesIO(bad_csv), "text/csv")},
+        headers=auth(admin_token),
+    )
+    assert resp.status_code == 400
+    assert "Missing required audit columns" in resp.json()["detail"]
+
+
 def test_nist_requires_auth(client):
     resp = client.get("/api/nist/scans")
     assert resp.status_code == 401
