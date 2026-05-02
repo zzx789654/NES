@@ -1,5 +1,6 @@
 #!/bin/bash
 # 同步最新 backend + frontend 程式碼並重啟服務
+# 用法：bash deploy/redeploy-backend.sh [SERVER_IP] [--reset-admin [新密碼]]
 set -euo pipefail
 
 REPO_DIR=$(cd "$(dirname "$0")/.." && pwd)
@@ -7,7 +8,24 @@ BACKEND_DIR=/opt/secvision/backend
 WEB_DIR=/var/www/secvision
 SERVICE_NAME=secvision
 LOCAL_API_URL=http://127.0.0.1:8000
-SERVER_IP=${1:-}
+SERVER_IP=""
+RESET_ADMIN=false
+NEW_ADMIN_PASS=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --reset-admin)
+      RESET_ADMIN=true
+      if [[ $# -gt 1 && "$2" != --* ]]; then
+        NEW_ADMIN_PASS="$2"; shift
+      else
+        NEW_ADMIN_PASS="Admin@$(openssl rand -hex 4)"
+      fi
+      shift ;;
+    *) SERVER_IP="$1"; shift ;;
+  esac
+done
 
 if [[ ! -d "$REPO_DIR/backend" ]]; then
   echo "❌ 找不到來源目錄: $REPO_DIR/backend"
@@ -41,6 +59,15 @@ sudo nginx -t
 
 echo "==> Run database migrations"
 cd "$BACKEND_DIR" && sudo -u secvision /opt/secvision/venv/bin/alembic upgrade head
+
+if [[ "$RESET_ADMIN" == "true" ]]; then
+  echo "==> Reset admin password"
+  sudo bash "$REPO_DIR/deploy/create-admin.sh" "admin" "$NEW_ADMIN_PASS" admin
+  echo ""
+  echo "🔐 Admin 密碼已重設"
+  echo "   username: admin"
+  echo "   password: ${NEW_ADMIN_PASS}"
+fi
 
 echo "==> Restart services"
 sudo systemctl daemon-reload

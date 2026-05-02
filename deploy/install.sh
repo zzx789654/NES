@@ -7,13 +7,12 @@ APP_DIR=/opt/secvision
 WEB_DIR=/var/www/secvision
 REPO_DIR=$(cd "$(dirname "$0")/.." && pwd)
 SERVER_IP=$(hostname -I | awk '{print $1}')
-ADMIN_USER=${ADMIN_USER:-admin}
-ADMIN_PASS=${ADMIN_PASS:-Admin@123456}
+ADMIN_USER="${ADMIN_USER:-admin}"
 
-
-# ── 預設值（可透過參數覆蓋）────────────────────────────────────────────────────
-DB_PASS="changeme_$(openssl rand -hex 6)"
-ADMIN_PASS="Admin$(openssl rand -hex 4)"
+# 預設隨機密碼（符合密碼政策：大寫+數字+特殊字元）
+# 可用環境變數 ADMIN_PASS 或 --admin-pass 參數覆蓋
+DB_PASS="${DB_PASS:-changeme_$(openssl rand -hex 6)}"
+ADMIN_PASS="${ADMIN_PASS:-Admin@$(openssl rand -hex 4)}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
