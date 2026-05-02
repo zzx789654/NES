@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    model_config = {"env_file": ".env"}
+    model_config = {"env_file": ".env", "extra": "ignore"}
 
     database_url: str = "sqlite:///./secvision.db"
     secret_key: str = "dev-secret-key-change-in-production"
