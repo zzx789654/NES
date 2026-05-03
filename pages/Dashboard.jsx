@@ -1,6 +1,14 @@
-﻿// Dashboard Page
+// Dashboard Page
 
 const { useState, useEffect } = React;
+
+const RISK_COLORS = [
+  'oklch(0.60 0.22 25)',
+  'oklch(0.68 0.20 45)',
+  'oklch(0.76 0.17 72)',
+  'oklch(0.70 0.14 195)',
+  'oklch(0.62 0.06 240)',
+];
 
 function DashboardPage({ onNavigate, onStatsChange }) {
   const [stats, setStats] = useState(null);
@@ -61,7 +69,7 @@ function DashboardPage({ onNavigate, onStatsChange }) {
     labels: ['Critical', 'High', 'Medium', 'Low', 'Info'],
     datasets: [{
       data: [risk.critical || 0, risk.high || 0, risk.medium || 0, risk.low || 0, risk.info || 0],
-      backgroundColor: ['var(--critical)', 'var(--high)', 'var(--medium)', 'var(--low)', 'var(--info)'],
+      backgroundColor: RISK_COLORS,
       borderWidth: 0,
       hoverOffset: 6,
     }],
@@ -69,10 +77,10 @@ function DashboardPage({ onNavigate, onStatsChange }) {
 
   const detailMetrics = [
     { label: 'Critical', value: risk.critical ?? 0, color: 'var(--critical)' },
-    { label: 'High', value: risk.high ?? 0, color: 'var(--high)' },
-    { label: 'Medium', value: risk.medium ?? 0, color: 'var(--medium)' },
-    { label: 'Low', value: risk.low ?? 0, color: 'var(--low)' },
-    { label: 'Info', value: risk.info ?? 0, color: 'var(--info)' },
+    { label: 'High',     value: risk.high ?? 0,     color: 'var(--high)' },
+    { label: 'Medium',   value: risk.medium ?? 0,   color: 'var(--medium)' },
+    { label: 'Low',      value: risk.low ?? 0,      color: 'var(--low)' },
+    { label: 'Info',     value: risk.info ?? 0,     color: 'var(--info)' },
   ];
 
   return (

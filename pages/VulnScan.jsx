@@ -1,4 +1,4 @@
-﻿// Vulnerability Scan Page — API-driven scan list, filters, charts, IP groups, diff, upload
+// Vulnerability Scan Page — API-driven scan list, filters, charts, IP groups, diff, upload
 
 const { useState, useEffect, useMemo, useRef } = React;
 
@@ -155,7 +155,7 @@ function IPGroupManager({ allHosts, selectedIPs, onSelectIPs }) {
   const [newGroupName, setNewGroupName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [editTarget, setEditTarget] = useState(null); // {id, name, ips}
+  const [editTarget, setEditTarget] = useState(null);
   const [editName, setEditName] = useState('');
   const [editIPs, setEditIPs] = useState([]);
 
@@ -206,7 +206,6 @@ function IPGroupManager({ allHosts, selectedIPs, onSelectIPs }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {/* 編輯群組 Modal */}
       {editTarget && (
         <div style={{ position: 'fixed', inset: 0, background: 'oklch(0 0 0 / 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--rlg)', padding: '24px 28px', width: 420, maxWidth: '90vw' }}>
@@ -234,7 +233,6 @@ function IPGroupManager({ allHosts, selectedIPs, onSelectIPs }) {
                   })
                 }
               </div>
-              {/* 也可手動輸入 IP */}
               <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text3)' }}>
                 目前已選：{editIPs.length === 0 ? '—' : editIPs.join('、')}
               </div>
@@ -578,6 +576,7 @@ function VulnScanPage({ onStatsChange }) {
         onChange={t => { setTab(t); setError(''); setSearch(''); setSevFilter('all'); }}
         tabs={[
           { id: 'history', label: '掃描結果', icon: '📋', count: selectedScan?.vuln_count ?? 0 },
+          { id: 'hosthistory', label: '主機歷程', icon: '🖥️', count: hostHistory?.total_scans ?? undefined },
           { id: 'matrix', label: '風險矩陣', icon: '⊞' },
           { id: 'diff', label: 'Diff 比較', icon: '⇄', count: diffCounts.new || 0 },
           { id: 'upload', label: '上傳管理', icon: '📂' },
@@ -636,38 +635,6 @@ function VulnScanPage({ onStatsChange }) {
               })}
             </div>
 
-            <Card title="主機歷程" action={hostHistory?.history?.length ? <span style={{ fontSize: 11, color: 'var(--text3)' }}>{hostHistory.history.length} 次掃描紀錄</span> : null}>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ minWidth: 220 }}>
-                  <select value={historyHost} onChange={e => setHistoryHost(e.target.value)}
-                    style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 'var(--rsm)', padding: '8px 10px', fontSize: 13 }}>
-                    <option value="">選擇主機以查看歷程</option>
-                    {allHosts.map(host => <option key={host} value={host}>{host}</option>)}
-                  </select>
-                </div>
-                {hostHistory && !historyLoading && (
-                  <div style={{ fontSize: 12, color: 'var(--text2)' }}>
-                    首次出現：{hostHistory.first_seen ? hostHistory.first_seen.slice(0, 10) : '—'}
-                    <br />
-                    最近出現：{hostHistory.last_seen ? hostHistory.last_seen.slice(0, 10) : '—'}
-                  </div>
-                )}
-              </div>
-              {historyLoading ? (
-                <div style={{ color: 'var(--text2)' }}>載入主機歷程…</div>
-              ) : historyError ? (
-                <div style={{ color: 'var(--critical)' }}>{historyError}</div>
-              ) : hostHistory?.history?.length ? (
-                <Timeline items={hostHistory.history.map(item => ({
-                  type: 'scan',
-                  text: `${item.scan_name} · ${item.vuln_count} 筆弱點`,
-                  date: item.scan_date ? item.scan_date : item.uploaded_at.slice(0, 10),
-                }))} />
-              ) : (
-                <div style={{ color: 'var(--text3)', fontSize: 12 }}>目前尚無主機歷程資料，請選擇有漏洞紀錄的主機。</div>
-              )}
-            </Card>
-
             <Card noPad>
               <DataTable columns={columns} rows={filteredVulns} maxHeight={520} onRowClick={row => setExpandedRow(expandedRow?.id === row.id ? null : row)} />
             </Card>
@@ -706,6 +673,108 @@ function VulnScanPage({ onStatsChange }) {
                   </div>
                 </div>
               </Card>
+            )}
+          </div>
+        )}
+
+        {tab === 'hosthistory' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <select value={historyHost} onChange={e => setHistoryHost(e.target.value)}
+                style={{ minWidth: 240, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 'var(--rsm)', padding: '8px 12px', fontSize: 13 }}>
+                <option value="">選擇主機以查看歷程</option>
+                {allHosts.map(host => <option key={host} value={host}>{host}</option>)}
+              </select>
+              {historyHost && !historyLoading && hostHistory && (
+                <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
+                  {hostHistory.total_scans} 次掃描紀錄
+                </span>
+              )}
+            </div>
+
+            {historyLoading ? (
+              <div style={{ padding: 32, textAlign: 'center', color: 'var(--text2)' }}>載入主機歷程…</div>
+            ) : historyError ? (
+              <div style={{ padding: 32, textAlign: 'center', color: 'var(--critical)' }}>{historyError}</div>
+            ) : !historyHost ? (
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>請選擇主機以查看歷程</div>
+            ) : !hostHistory ? null : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                  {[
+                    { label: '掃描次數', value: hostHistory.total_scans, color: 'var(--accent)' },
+                    { label: '總弱點數', value: hostHistory.history.reduce((s, i) => s + i.vuln_count, 0), color: 'var(--critical)' },
+                    { label: '首次出現', value: hostHistory.first_seen ? hostHistory.first_seen.slice(0, 10) : '—', color: 'var(--text2)' },
+                    { label: '最近出現', value: hostHistory.last_seen ? hostHistory.last_seen.slice(0, 10) : '—', color: 'var(--text2)' },
+                  ].map(item => (
+                    <div key={item.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '14px 16px' }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 6 }}>{item.label}</div>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: item.color, fontFamily: 'var(--font-mono)' }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {hostHistory.history.length > 0 && (() => {
+                  const reversed = [...hostHistory.history].reverse();
+                  const chartData = {
+                    labels: reversed.map(item => item.scan_date ? String(item.scan_date).slice(0, 10) : item.uploaded_at.slice(0, 10)),
+                    datasets: [
+                      { label: 'Critical', data: reversed.map(i => i.critical), backgroundColor: 'oklch(0.60 0.22 25)' },
+                      { label: 'High',     data: reversed.map(i => i.high),     backgroundColor: 'oklch(0.68 0.20 45)' },
+                      { label: 'Medium',   data: reversed.map(i => i.medium),   backgroundColor: 'oklch(0.76 0.17 72)' },
+                      { label: 'Low',      data: reversed.map(i => i.low),      backgroundColor: 'oklch(0.70 0.14 195)' },
+                      { label: 'Info',     data: reversed.map(i => i.info),     backgroundColor: 'oklch(0.62 0.06 240)' },
+                    ],
+                  };
+                  const chartOptions = {
+                    plugins: { legend: { position: 'top' } },
+                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
+                  };
+                  return (
+                    <Card title={`風險趨勢 — ${historyHost}`}>
+                      <ChartCanvas type="bar" data={chartData} options={chartOptions} height={240} />
+                    </Card>
+                  );
+                })()}
+
+                <Card title="掃描明細" noPad>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: 'var(--surface2)' }}>
+                          {['掃描批次', '掃描日期', '總計', 'Critical', 'High', 'Medium', 'Low', 'Info'].map(h => (
+                            <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text2)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap', position: 'sticky', top: 0, background: 'var(--surface2)' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hostHistory.history.map((item, i) => (
+                          <tr key={item.scan_id} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 0 ? 'transparent' : 'var(--surface2)' }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-bg)'}
+                            onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'var(--surface2)'}>
+                            <td style={{ padding: '10px 14px', fontWeight: 500, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.scan_name}>{item.scan_name}</td>
+                            <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text2)' }}>{item.scan_date ? String(item.scan_date).slice(0, 10) : item.uploaded_at.slice(0, 10)}</td>
+                            <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{item.vuln_count}</td>
+                            <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', color: item.critical > 0 ? 'oklch(0.60 0.22 25)' : 'var(--text3)', fontWeight: item.critical > 0 ? 700 : 400 }}>{item.critical}</td>
+                            <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', color: item.high > 0 ? 'oklch(0.68 0.20 45)' : 'var(--text3)', fontWeight: item.high > 0 ? 700 : 400 }}>{item.high}</td>
+                            <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', color: item.medium > 0 ? 'oklch(0.76 0.17 72)' : 'var(--text3)', fontWeight: item.medium > 0 ? 700 : 400 }}>{item.medium}</td>
+                            <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', color: item.low > 0 ? 'oklch(0.70 0.14 195)' : 'var(--text3)', fontWeight: item.low > 0 ? 700 : 400 }}>{item.low}</td>
+                            <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', color: item.info > 0 ? 'oklch(0.62 0.06 240)' : 'var(--text3)', fontWeight: item.info > 0 ? 700 : 400 }}>{item.info}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+
+                <Card title="掃描時間軸">
+                  <Timeline items={hostHistory.history.map(item => ({
+                    type: 'scan',
+                    text: `${item.scan_name} · ${item.vuln_count} 筆弱點（Critical ${item.critical} / High ${item.high} / Medium ${item.medium}）`,
+                    date: item.scan_date ? String(item.scan_date).slice(0, 10) : item.uploaded_at.slice(0, 10),
+                  }))} />
+                </Card>
+              </>
             )}
           </div>
         )}
