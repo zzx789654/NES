@@ -2,7 +2,10 @@ import json
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
 
+from alembic import command as alembic_command
+from alembic.config import Config as AlembicConfig
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -19,14 +22,33 @@ from routers import auth, scans, nist, ipgroups, dashboard
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 audit_logger = logging.getLogger("audit")
+logger = logging.getLogger("main")
 
-# Create all tables (dev convenience; use alembic in production)
-Base.metadata.create_all(bind=engine)
+
+def _run_migrations() -> None:
+    """Apply any pending Alembic migrations before serving traffic."""
+    alembic_ini = os.path.join(os.path.dirname(__file__), "alembic.ini")
+    if not os.path.exists(alembic_ini):
+        # Fallback for environments without alembic config (e.g. bare dev clone)
+        Base.metadata.create_all(bind=engine)
+        logger.warning("alembic.ini not found — used create_all() as fallback")
+        return
+    cfg = AlembicConfig(alembic_ini)
+    alembic_command.upgrade(cfg, "head")
+    logger.info("Database migrations up to date")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _run_migrations()
+    yield
+
 
 app = FastAPI(
     title="SecVision ISMS API",
     version="1.0.0",
     description="Backend API for SecVision ISMS Security Portal",
+    lifespan=lifespan,
 )
 
 app.state.limiter = limiter
