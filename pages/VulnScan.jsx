@@ -155,7 +155,7 @@ function IPGroupManager({ allHosts, selectedIPs, onSelectIPs }) {
   const [newGroupName, setNewGroupName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [editTarget, setEditTarget] = useState(null); // {id, name, ips}
+  const [editTarget, setEditTarget] = useState(null);
   const [editName, setEditName] = useState('');
   const [editIPs, setEditIPs] = useState([]);
 
@@ -206,7 +206,6 @@ function IPGroupManager({ allHosts, selectedIPs, onSelectIPs }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {/* 編輯群組 Modal */}
       {editTarget && (
         <div style={{ position: 'fixed', inset: 0, background: 'oklch(0 0 0 / 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--rlg)', padding: '24px 28px', width: 420, maxWidth: '90vw' }}>
@@ -234,7 +233,6 @@ function IPGroupManager({ allHosts, selectedIPs, onSelectIPs }) {
                   })
                 }
               </div>
-              {/* 也可手動輸入 IP */}
               <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text3)' }}>
                 目前已選：{editIPs.length === 0 ? '—' : editIPs.join('、')}
               </div>
@@ -681,7 +679,6 @@ function VulnScanPage({ onStatsChange }) {
 
         {tab === 'hosthistory' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* Host selector */}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <select value={historyHost} onChange={e => setHistoryHost(e.target.value)}
                 style={{ minWidth: 240, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 'var(--rsm)', padding: '8px 12px', fontSize: 13 }}>
@@ -703,7 +700,6 @@ function VulnScanPage({ onStatsChange }) {
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>請選擇主機以查看歷程</div>
             ) : !hostHistory ? null : (
               <>
-                {/* Summary stat cards */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
                   {[
                     { label: '掃描次數', value: hostHistory.total_scans, color: 'var(--accent)' },
@@ -718,7 +714,6 @@ function VulnScanPage({ onStatsChange }) {
                   ))}
                 </div>
 
-                {/* Risk trend chart */}
                 {hostHistory.history.length > 0 && (() => {
                   const reversed = [...hostHistory.history].reverse();
                   const chartData = {
@@ -742,7 +737,6 @@ function VulnScanPage({ onStatsChange }) {
                   );
                 })()}
 
-                {/* Detail table */}
                 <Card title="掃描明細" noPad>
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -773,7 +767,6 @@ function VulnScanPage({ onStatsChange }) {
                   </div>
                 </Card>
 
-                {/* Timeline */}
                 <Card title="掃描時間軸">
                   <Timeline items={hostHistory.history.map(item => ({
                     type: 'scan',
