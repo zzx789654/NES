@@ -124,7 +124,7 @@ def get_host_history(host: str, db: Session = Depends(get_db), _=Depends(get_cur
 
 
 @router.delete("/{scan_id}", status_code=204)
-def delete_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(require_role("admin", "analyst"))):
+def delete_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(require_role("admin"))):
     scan = db.query(Scan).filter(Scan.id == scan_id).first()
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")

@@ -205,7 +205,7 @@ function App() {
         onLogout={() => { APIClient.logout(); setIsLoggedIn(false); }}
       />
       <main style={{flex:1,overflow:'auto',background:'var(--bg)',padding:'24px 32px'}}>
-        <PageComponent onNavigate={setPage} onStatsChange={refreshStats} />
+        <PageComponent onNavigate={setPage} onStatsChange={refreshStats} currentUser={currentUser} />
       </main>
       {changePasswordOpen && (
         <Modal open={changePasswordOpen} title="變更密碼" onClose={() => setChangePasswordOpen(false)} width={520}>

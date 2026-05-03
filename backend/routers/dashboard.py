@@ -58,4 +58,7 @@ def get_dashboard(db: Session = Depends(get_db), _=Depends(get_current_user)):
         audit_scan_count=db.query(AuditScan).count(),
         latest_scan_date=latest_scan_date,
         latest_audit_date=latest_audit_date,
+        latest_scan_id=latest_scan.id if latest_scan else None,
+        latest_scan_name=latest_scan.name if latest_scan else None,
+        latest_scan_host_count=latest_scan.host_count if latest_scan else None,
     )

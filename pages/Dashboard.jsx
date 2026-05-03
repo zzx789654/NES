@@ -83,6 +83,14 @@ function DashboardPage({ onNavigate, onStatsChange }) {
     { label: 'Info',     value: risk.info ?? 0,     color: 'var(--info)' },
   ];
 
+  const latestScanSev = [
+    { short: 'C', value: risk.critical || 0, color: 'oklch(0.60 0.22 25)' },
+    { short: 'H', value: risk.high || 0,     color: 'oklch(0.68 0.20 45)' },
+    { short: 'M', value: risk.medium || 0,   color: 'oklch(0.76 0.17 72)' },
+    { short: 'L', value: risk.low || 0,      color: 'oklch(0.70 0.14 195)' },
+    { short: 'I', value: risk.info || 0,     color: 'oklch(0.62 0.06 240)' },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -135,9 +143,39 @@ function DashboardPage({ onNavigate, onStatsChange }) {
             <Btn variant="secondary" size="sm" onClick={() => onNavigate('nist')}>檢視 NIST 報表</Btn>
             <Btn variant="ghost" size="sm" onClick={loadStats}>手動重新整理</Btn>
           </div>
-          <div style={{ marginTop: 14, color: 'var(--text2)', fontSize: 12, lineHeight: 1.6 }}>
-            本儀表板呈現最近一次掃描與稽核概況，並提供高風險弱點與 NIST 合規率的快速導引。
-          </div>
+
+          {stats.latest_scan_name ? (
+            <div style={{ marginTop: 14, padding: '12px 14px', background: 'var(--surface2)', borderRadius: 'var(--rsm)', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 4 }}>最近一筆弱點掃描</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{stats.latest_scan_name}</div>
+                  {stats.latest_scan_date && (
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{formatDate(stats.latest_scan_date)}</div>
+                  )}
+                </div>
+                <Btn size="sm" variant="ghost" onClick={() => onNavigate('vulnscan')}>前往查看</Btn>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6 }}>
+                {latestScanSev.map(item => (
+                  <div key={item.short} style={{ textAlign: 'center', padding: '7px 4px', background: 'var(--surface)', borderRadius: 'var(--rsm)' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2 }}>{item.short}</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: item.color, fontFamily: 'var(--font-mono)' }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+              {stats.latest_scan_host_count != null && (
+                <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text3)' }}>
+                  主機數：<strong style={{ color: 'var(--text2)' }}>{stats.latest_scan_host_count}</strong>
+                  　總弱點：<strong style={{ color: 'var(--text)' }}>{risk.total || 0}</strong>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ marginTop: 14, color: 'var(--text2)', fontSize: 12, lineHeight: 1.6 }}>
+              本儀表板呈現最近一次掃描與稽核概況，並提供高風險弱點與 NIST 合規率的快速導引。
+            </div>
+          )}
         </Card>
 
         <Card title="弱點風險分布" action={<Btn variant="ghost" size="sm" onClick={() => onNavigate('vulnscan')}>查看詳情</Btn>}>
