@@ -254,7 +254,7 @@ async def upload_scan(
             "see_also":                 v.get("see_also"),
             "cvss_v2_base":             v.get("cvss_v2_base"),
             "cvss_v2_temporal":         v.get("cvss_v2_temporal"),
-            "cvss_v3_base":             v.get("cvss_v3_base") or v.get("cvss"),
+            "cvss_v3_base":             v.get("cvss_v3_base") or v.get("cvss") or v.get("cvss_v2_base"),
             "cvss_v3_temporal":         v.get("cvss_v3_temporal"),
             "cvss_v4_base":             v.get("cvss_v4_base"),
             "cvss_v4_threat_score":     v.get("cvss_v4_threat_score"),

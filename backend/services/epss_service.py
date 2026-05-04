@@ -24,7 +24,7 @@ async def fetch_epss_scores(cves: list[str]) -> dict[str, float]:
             resp = await client.get(EPSS_API, params={"cve": ",".join(chunk)})
             resp.raise_for_status()
             return {
-                item["cve"].upper(): round(float(item["epss"]), 4)
+                item["cve"].upper(): round(float(item["epss"]), 3)
                 for item in resp.json().get("data", [])
                 if item.get("cve") and item.get("epss") is not None
             }

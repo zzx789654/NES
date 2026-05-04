@@ -98,7 +98,7 @@ def parse_nessus_csv(content: bytes, scan_name: str, scan_date: date | None = No
         df[col] = pd.to_numeric(df[col], errors="coerce").round(1)
 
     # ── EPSS 4-decimal ────────────────────────────────────────────────────────
-    df["epss"] = pd.to_numeric(df["epss"], errors="coerce").round(4)
+    df["epss"] = pd.to_numeric(df["epss"], errors="coerce").round(3)
 
     # ── Date columns ──────────────────────────────────────────────────────────
     for col in ("plugin_publication_date", "plugin_modification_date"):
