@@ -1,36 +1,40 @@
-"""Fetch EPSS scores from FIRST.org API."""
+"""Fetch EPSS scores from FIRST.org API — concurrent batch requests."""
+import asyncio
 import httpx
 
 EPSS_API = "https://api.first.org/data/1.0/epss"
 
 
 async def fetch_epss_scores(cves: list[str]) -> dict[str, float]:
-    """Return {cve_id: epss_score} for given CVEs. Silently skips on error."""
+    """Return {CVE_ID: epss_score}. Deduplicates input, fetches all batches concurrently."""
     if not cves:
         return {}
 
-    valid = [c for c in cves if c and c.upper().startswith("CVE-")]
+    # Deduplicate and validate
+    valid = list({c.upper() for c in cves if c and c.upper().startswith("CVE-")})
     if not valid:
         return {}
 
-    results: dict[str, float] = {}
     chunk_size = 100
-    # Use a short connect timeout + per-request timeout to avoid blocking uploads
-    timeout = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        for i in range(0, len(valid), chunk_size):
-            chunk = valid[i : i + chunk_size]
-            params = {"cve": ",".join(chunk)}
-            try:
-                resp = await client.get(EPSS_API, params=params)
-                resp.raise_for_status()
-                data = resp.json().get("data", [])
-                for item in data:
-                    cve_id = item.get("cve", "")
-                    epss = item.get("epss")
-                    if cve_id and epss is not None:
-                        results[cve_id.upper()] = round(float(epss), 4)
-            except Exception:
-                pass  # EPSS enrichment is best-effort
+    chunks = [valid[i : i + chunk_size] for i in range(0, len(valid), chunk_size)]
+    timeout = httpx.Timeout(connect=3.0, read=8.0, write=3.0, pool=3.0)
 
-    return results
+    async def _fetch(client: httpx.AsyncClient, chunk: list[str]) -> dict[str, float]:
+        try:
+            resp = await client.get(EPSS_API, params={"cve": ",".join(chunk)})
+            resp.raise_for_status()
+            return {
+                item["cve"].upper(): round(float(item["epss"]), 4)
+                for item in resp.json().get("data", [])
+                if item.get("cve") and item.get("epss") is not None
+            }
+        except Exception:
+            return {}
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        results_list = await asyncio.gather(*[_fetch(client, chunk) for chunk in chunks])
+
+    result: dict[str, float] = {}
+    for r in results_list:
+        result.update(r)
+    return result

@@ -1,5 +1,6 @@
 from datetime import date
 from typing import Optional
+import asyncio
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import insert, nulls_last
@@ -203,16 +204,16 @@ async def upload_scan(
 
     if filename_lower.endswith(".csv"):
         try:
-            parsed = parse_nessus_csv(content, name, parsed_date)
+            parsed = await asyncio.to_thread(parse_nessus_csv, content, name, parsed_date)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
     elif filename_lower.endswith(".json"):
         try:
-            parsed = parse_nvd_json(content, name, parsed_date)
+            parsed = await asyncio.to_thread(parse_nvd_json, content, name, parsed_date)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
     else:
-        parsed = parse_nvd_json(content, name, parsed_date)
+        parsed = await asyncio.to_thread(parse_nvd_json, content, name, parsed_date)
 
     scan = Scan(
         name=parsed["name"],
@@ -224,11 +225,11 @@ async def upload_scan(
     db.add(scan)
     db.flush()
 
-    # Only fetch EPSS from API for CVEs that don't already have a value from the CSV
-    cves_missing_epss = [
-        v["cve"] for v in parsed["vulnerabilities"]
+    # Fetch EPSS only for unique CVEs missing a value — set removes duplicates
+    cves_missing_epss = list({
+        v["cve"].upper() for v in parsed["vulnerabilities"]
         if v.get("cve") and v.get("epss") is None
-    ]
+    })
     epss_map = await fetch_epss_scores(cves_missing_epss)
 
     vuln_rows = []
