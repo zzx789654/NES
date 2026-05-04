@@ -1,287 +1,318 @@
-# SecVision ISMS Portal (NES)
+# SecVision — ISMS Security Portal
 
-SecVision 是一套以 **前端儀表板 + FastAPI 後端 API** 組成的資安管理入口，涵蓋：
-
-- 弱點掃描（Nessus CSV / NVD JSON，全量 31 欄位）
-- NIST 稽核掃描（Audit CSV）
-- 掃描差異比較（Diff）
-- Dashboard 匯總統計
-- JWT 驗證與角色權限（admin / analyst / viewer）
-- IP 群組管理
-- 資安加固（Rate Limiting、Security Headers、Audit Logging）
+A full-stack vulnerability management platform for enterprise security teams. Upload Nessus CSV scans and NVD CVE JSON, track vulnerability trends over time, compare scan diffs, and monitor NIST audit compliance — all in one dark-themed web UI backed by a FastAPI/SQLAlchemy REST API.
 
 ---
 
-## 專案結構
+## Architecture
 
-```text
+```
+┌─────────────────────────────────────────────────────────┐
+│  Browser (React 18 UMD + Babel standalone)              │
+│  index.html → api-client.js → pages/  → components.jsx  │
+└───────────────────┬─────────────────────────────────────┘
+                    │ HTTPS / JWT Bearer
+┌───────────────────▼─────────────────────────────────────┐
+│  Nginx  (port 80/443)                                    │
+│  · Serves static frontend files                         │
+│  · Reverse-proxies /api/ → 127.0.0.1:8000               │
+│  · /api/scans/upload: 300 s timeout, 50 MB body         │
+└───────────────────┬─────────────────────────────────────┘
+                    │
+┌───────────────────▼─────────────────────────────────────┐
+│  FastAPI  (uvicorn, port 8000)                           │
+│  · SecurityHeadersMiddleware (CSP, X-Frame, …)          │
+│  · AuditLogMiddleware (JSON structured logs)            │
+│  · SlowAPI rate limiting (login 10/min, upload 5/min)   │
+│  · JWT RBAC: admin / analyst / viewer                   │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │  Routers                                         │   │
+│  │  /api/auth      — login, register, change-pw     │   │
+│  │  /api/scans     — upload, list, detail, diff,    │   │
+│  │                   host history, delete           │   │
+│  │  /api/nist      — audit upload, diff, trend      │   │
+│  │  /api/ipgroups  — IP group CRUD                  │   │
+│  │  /api/dashboard — aggregated KPI stats           │   │
+│  └──────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │  Services                                        │   │
+│  │  nessus_parser  — vectorised pandas CSV parse    │   │
+│  │  cve_parser     — NVD JSON parse                 │   │
+│  │  audit_parser   — NIST audit CSV parse           │   │
+│  │  epss_service   — async batch FIRST.org queries  │   │
+│  │  diff_service   — O(n) scan comparison           │   │
+│  └──────────────────────────────────────────────────┘   │
+└───────────────────┬─────────────────────────────────────┘
+                    │ SQLAlchemy 2.0 ORM
+┌───────────────────▼─────────────────────────────────────┐
+│  Database: SQLite (dev) / PostgreSQL 16 (production)    │
+│  Tables: scans, vulnerabilities, audit_scans,           │
+│          audit_results, ip_groups, users                │
+│  Migrations: Alembic (auto-applied on startup)          │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Frontend pages
+
+| Page | File | Description |
+|------|------|-------------|
+| Login | `pages/Login.jsx` | JWT auth, session storage |
+| Dashboard | `pages/Dashboard.jsx` | KPI cards, risk summary, quick actions |
+| Vulnerability Scan | `pages/VulnScan.jsx` | Upload, filter, diff, EPSS/VPR matrix, host history |
+| NIST Audit | `pages/NIST.jsx` | Audit results, compliance trend |
+| User Management | `pages/UserManagement.jsx` | Admin: create/delete users, assign roles |
+
+---
+
+## Quick Start (Development)
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js not required (React loaded from CDN)
+
+### 1 — Clone and set up backend
+
+```bash
+git clone <repo-url>
+cd NES/backend
+
+python3 -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 2 — Configure environment
+
+```bash
+cp .env.example .env
+# Edit .env — at minimum set SECRET_KEY to a random string
+```
+
+`.env` variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `sqlite:///./secvision.db` | SQLite (dev) or `postgresql://user:pass@host/db` |
+| `SECRET_KEY` | *(insecure default)* | JWT signing key — **must change in production** |
+| `ALLOWED_ORIGINS` | `*` | CORS origins, e.g. `https://yourdomain.com` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `480` | JWT lifetime (8 hours) |
+
+### 3 — Start backend
+
+```bash
+cd backend
+uvicorn main:app --reload --port 8000
+# Alembic migrations run automatically on first start
+```
+
+### 4 — Create first admin account
+
+```bash
+bash deploy/create-admin.sh
+# or manually:
+curl -X POST http://localhost:8000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"Admin@1234","role":"admin"}'
+```
+
+### 5 — Serve the frontend
+
+```bash
+cd NES
+python3 -m http.server 8080
+# Open http://localhost:8080
+```
+
+---
+
+## Production Deployment (Ubuntu 22.04 / 24.04)
+
+```bash
+sudo bash deploy/install.sh
+```
+
+The script:
+1. Installs Python 3.11, Nginx, (optionally PostgreSQL)
+2. Creates a `secvision` system user
+3. Installs Python dependencies into `/opt/secvision/venv`
+4. Generates a random `SECRET_KEY` in `/opt/secvision/.env`
+5. Copies `deploy/nginx.conf` to `/etc/nginx/sites-enabled/`
+6. Enables and starts the `secvision.service` systemd unit
+7. Runs `deploy/smoke-test.sh` to verify the API is up
+
+After install, set your domain in `/etc/nginx/sites-enabled/secvision.conf` and reload Nginx.
+
+---
+
+## API Reference
+
+Interactive docs: `http://localhost:8000/docs` (Swagger UI)
+
+### Authentication
+
+```
+POST /api/auth/token           # Login → JWT
+POST /api/auth/register        # Create user (admin only)
+GET  /api/auth/me              # Current user info
+POST /api/auth/change-password
+```
+
+### Vulnerability Scans
+
+```
+GET    /api/scans                           # List all scans (paginated)
+POST   /api/scans/upload                    # Upload Nessus CSV or NVD JSON
+GET    /api/scans/{id}                      # Scan summary + slim vuln list
+GET    /api/scans/{id}/vulns/{vuln_id}      # Full vulnerability detail
+GET    /api/scans/diff?base={id}&comp={id}  # Compare two scans
+GET    /api/scans/hosts/{ip}/history        # Per-host vulnerability history
+DELETE /api/scans/{id}                      # Delete scan (admin/analyst)
+```
+
+### NIST Audit
+
+```
+GET    /api/nist/scans              # List audit scans
+POST   /api/nist/upload             # Upload audit CSV
+GET    /api/nist/scans/{id}         # Audit detail
+GET    /api/nist/diff?base=&comp=   # Compare two audits
+GET    /api/nist/trend              # Pass-rate trend over time
+DELETE /api/nist/scans/{id}
+```
+
+### Other
+
+```
+GET    /api/dashboard        # Aggregated KPIs
+GET    /api/ipgroups         # List IP groups
+POST   /api/ipgroups         # Create IP group
+PUT    /api/ipgroups/{id}
+DELETE /api/ipgroups/{id}
+```
+
+---
+
+## File Upload Formats
+
+### Nessus CSV
+
+Standard Nessus export. Supports all 31 columns including CVSS v2/v3/v4, EPSS, VPR, exploit flags (Metasploit, Core Impact, CANVAS), and plugin metadata. Column name aliases are resolved automatically.
+
+### NVD CVE JSON (NVD API 2.0)
+
+```json
+{
+  "vulnerabilities": [
+    {
+      "cve": {
+        "id": "CVE-2024-XXXX",
+        "descriptions": [{"lang": "en", "value": "..."}],
+        "metrics": {
+          "cvssMetricV31": [{"cvssData": {"baseScore": 9.8}}]
+        }
+      }
+    }
+  ]
+}
+```
+
+Sample file: `samples/cve-upload-sample.json`
+
+---
+
+## Security Controls
+
+| Control | Implementation |
+|---------|----------------|
+| Authentication | JWT HS256, 8-hour expiry, Bearer token |
+| Authorization | RBAC: `admin` / `analyst` / `viewer` |
+| Password policy | Min 8 chars, uppercase + digit + special char |
+| Rate limiting | Login: 10 req/min/IP · Upload: 5 req/min/IP |
+| Security headers | CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy |
+| Audit log | JSON-structured request log (method, path, IP, status, duration) |
+| Upload safety | 50 MB max, magic-byte content validation |
+| CORS | Configurable via `ALLOWED_ORIGINS`; `*` by default for dev |
+
+**Production checklist:**
+- Set `SECRET_KEY` to a cryptographically random value
+- Set `DATABASE_URL` to a PostgreSQL connection string
+- Set `ALLOWED_ORIGINS` to your domain(s)
+- Enable HTTPS in Nginx (certbot / Let's Encrypt)
+
+---
+
+## Running Tests
+
+```bash
+cd backend
+pip install -r requirements.txt
+pytest tests/ -v
+```
+
+**91 tests, 100% pass rate.**
+
+| Suite | Tests | Coverage area |
+|-------|-------|---------------|
+| `test_auth.py` | 14 | JWT login, registration, password change, RBAC |
+| `test_dashboard.py` | 4 | KPI aggregation |
+| `test_ipgroups.py` | 11 | IP group CRUD, rename conflict detection |
+| `test_nessus_fields.py` | 15 | All 31 Nessus fields, type coercion, edge cases |
+| `test_nist.py` | 14 | Audit upload, diff, trend |
+| `test_scans.py` | 16 | Scan upload, detail, diff, host history |
+| `test_services.py` | 17 | Parser logic, diff algorithm |
+
+---
+
+## Project Structure
+
+```
 NES/
-├── index.html
-├── app.jsx
-├── api-client.js
-├── components.jsx
+├── index.html                  # App entry point (React CDN, CSS variables, dark theme)
+├── api-client.js               # Unified fetch wrapper with JWT Bearer auth
+├── app.jsx                     # Shell: routing, auth state, sidebar navigation
+├── components.jsx              # Shared UI: Card, DataTable (virtual scroll), Btn, …
 ├── pages/
 │   ├── Login.jsx
 │   ├── Dashboard.jsx
-│   ├── VulnScan.jsx
-│   └── NIST.jsx
-├── backend/
-│   ├── main.py           # FastAPI + 安全中介軟體
-│   ├── config.py         # pydantic-settings 設定
-│   ├── database.py
-│   ├── limiter.py        # slowapi Rate Limiter
-│   ├── models/
-│   ├── routers/
-│   ├── schemas/
-│   ├── services/
-│   ├── tests/            # 79+ 測試，100% 通過率
-│   └── alembic/
-├── deploy/
-│   ├── install.sh
-│   ├── nginx.conf
-│   ├── secvision.service
-│   ├── redeploy-backend.sh
-│   ├── create-admin.sh
-│   └── smoke-test.sh
+│   ├── VulnScan.jsx            # Scan list, filters, diff, EPSS/VPR matrix, host history
+│   ├── NIST.jsx
+│   └── UserManagement.jsx
 ├── samples/
 │   └── cve-upload-sample.json
-├── 待修改.md
-└── 測試.md
+├── backend/
+│   ├── main.py                 # FastAPI app, middleware, lifespan (auto-migrations)
+│   ├── config.py               # pydantic-settings (.env support)
+│   ├── database.py             # SQLAlchemy engine (SQLite WAL tuning / PG pool)
+│   ├── limiter.py              # slowapi Limiter singleton
+│   ├── models/                 # ORM: Scan, Vulnerability, AuditScan, IPGroup, User
+│   ├── routers/                # auth, scans, nist, ipgroups, dashboard
+│   ├── schemas/                # Pydantic v2 request/response models
+│   ├── services/               # nessus_parser, cve_parser, audit_parser, epss_service, diff_service
+│   ├── alembic/                # DB migrations 0001–0003
+│   ├── tests/                  # pytest suite (91 tests)
+│   └── requirements.txt
+└── deploy/
+    ├── install.sh              # Ubuntu one-click install
+    ├── nginx.conf              # Reverse-proxy, security headers, rate limiting
+    ├── secvision.service       # systemd unit
+    ├── create-admin.sh         # First admin account helper
+    ├── redeploy-backend.sh     # Zero-downtime backend redeploy
+    └── smoke-test.sh           # Post-deploy API health check
 ```
 
 ---
 
-## 執行模式
+## User Roles
 
-### 1) Demo 模式
-
-- 前端以內建 mock 資料提供展示
-- 不依賴後端
-- 適合 UI 展示與快速體驗
-
-### 2) 後端模式
-
-- 登入後使用 JWT 呼叫 `/api/*`
-- 使用 FastAPI + PostgreSQL（測試環境可用 SQLite）
+| Role | Upload | Delete scans | Manage users | View |
+|------|:------:|:------------:|:------------:|:----:|
+| `admin` | ✅ | ✅ | ✅ | ✅ |
+| `analyst` | ✅ | ✅ | ❌ | ✅ |
+| `viewer` | ❌ | ❌ | ❌ | ✅ |
 
 ---
 
-## 本地開發
+## Version
 
-### 前端（靜態）
-
-```bash
-python3 -m http.server 8080
-# 或
-npx serve .
-```
-
-開啟：`http://localhost:8080`（開發模式）
-
-> 提示：部署至 Nginx 時使用 Port 80；本地開發使用 Port 8080。
-
-### 後端
-
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --reload --host 127.0.0.1 --port 8000
-```
-
-API 文件：`http://127.0.0.1:8000/docs`
-
----
-
-## API 摘要
-
-### Auth
-
-- `POST /api/auth/token`：登入取得 JWT（速率限制 10次/分/IP）
-- `GET /api/auth/me`：取得目前使用者
-- `POST /api/auth/register`：管理員建立帳號（密碼強度政策強制）
-- `POST /api/auth/change-password`：登入後變更自己的密碼
-
-### Scans
-
-- `GET /api/scans?page=1&page_size=50`：掃描清單（支援分頁）
-- `GET /api/scans/{id}`：掃描詳情
-- `POST /api/scans/upload`：上傳 Nessus CSV / NVD JSON（速率限制 5次/分/IP，最大 50MB）
-- `DELETE /api/scans/{id}`：刪除掃描（admin / analyst）
-- `GET /api/scans/diff?base=&comp=`：版本差異
-- `GET /api/scans/hosts/{host}/history`：主機弱點歷程
-
-> CVE JSON 上傳範例：`samples/cve-upload-sample.json`
-
-### NIST
-
-- `GET /api/nist/scans`：稽核清單
-- `GET /api/nist/scans/{id}`：稽核詳情
-- `POST /api/nist/upload`：上傳 Audit CSV（速率限制 5次/分/IP，最大 50MB）
-- `DELETE /api/nist/scans/{id}`：刪除稽核
-- `GET /api/nist/diff?base=&comp=`：稽核差異
-- `GET /api/nist/trend`：通過率趨勢
-
-### Dashboard
-
-- `GET /api/dashboard`：高風險 KPI 卡片、快速操作按鈕、NIST 合規摘要
-
-### IP Groups
-
-- `GET /api/ipgroups`
-- `POST /api/ipgroups`
-- `PUT /api/ipgroups/{id}`（重名防護，回傳 409）
-- `DELETE /api/ipgroups/{id}`
-
----
-
-## 資安功能
-
-| 功能 | 實作位置 | 說明 |
-|------|---------|------|
-| Rate Limiting | `main.py` + slowapi | 登入 10次/分；上傳 5次/分 |
-| Security Headers | `main.py SecurityHeadersMiddleware` | X-Frame-Options, CSP 等 6 項 |
-| Audit Logging | `main.py AuditLogMiddleware` | JSON 結構化請求稽核日誌 |
-| Password Policy | `schemas/auth.py` | 8字元+大寫+數字+特殊字元 |
-| File Upload Guard | `routers/scans.py` | 50MB 上限 + Magic Bytes 驗證 |
-| JWT RBAC | `routers/auth.py` | admin / analyst / viewer 三級 |
-
----
-
-## Nessus CSV 欄位支援（全量 31 欄位）
-
-| 分類 | 欄位 |
-|------|------|
-| 基本識別 | Plugin ID, CVE, Risk |
-| 位置 | Host, Protocol, Port |
-| 外掛資訊 | Name, Synopsis, Description, Solution, Plugin Output, See Also |
-| CVSS 評分 | v2.0 Base, v2.0 Temporal, v3.0 Base, v3.0 Temporal, v4.0 Base, v4.0+Threat |
-| 風險指標 | VPR Score, EPSS Score（上傳時自動查詢 FIRST.org） |
-| 合規 | Risk Factor, STIG Severity |
-| 參考 | BID, XREF, MSKB |
-| 元數據 | Plugin Publication Date, Plugin Modification Date |
-| 利用方式 | Metasploit, Core Impact, CANVAS |
-
----
-
-## 測試
-
-```bash
-cd backend
-pytest -q
-```
-
-測試套件：
-
-| 套件 | 測試數 | 說明 |
-|------|--------|------|
-| test_auth.py | 10 | JWT、RBAC、密碼政策 |
-| test_scans.py | 13 | 上傳、Diff、權限 |
-| test_nist.py | 11 | Audit 上傳、趨勢 |
-| test_dashboard.py | 4 | 聚合統計 |
-| test_ipgroups.py | 10 | CRUD、重名防護 |
-| test_nessus_fields.py | 13 | 31 欄位解析 |
-| test_services.py | 18 | Parser、Diff 邏輯 |
-| **合計** | **79+** | **100% 通過率** |
-
----
-
-## 部署（Ubuntu）
-
-建議使用 `deploy/` 內腳本進行安裝、重部署與管理者初始化：
-
-- `deploy/install.sh`
-- `deploy/redeploy-backend.sh`
-- `deploy/create-admin.sh`
-- `deploy/smoke-test.sh`
-
-### 自動安裝流程
-
-- 安裝腳本會建立 `/opt/secvision/backend/.env`，寫入 `DATABASE_URL`、`SECRET_KEY` 與 `ALLOWED_ORIGINS`。
-- PostgreSQL 使用者 `secvision` 會在部署時同步更新密碼，避免帳密不一致。
-- 安裝結束會自動驗證管理者登入，並執行核心 API smoke test。
-
-### 手動驗證
-
-```bash
-bash deploy/smoke-test.sh http://127.0.0.1:8000 admin '你的管理者密碼'
-```
-
-若回傳 `✅ Smoke test passed`，代表登入與核心 API 正常。
-
-### 生產環境必要設定
-
-```bash
-# /opt/secvision/backend/.env
-SECRET_KEY=<強隨機字串，至少 32 字元>
-DATABASE_URL=postgresql://secvision:<password>@localhost/secvision
-ALLOWED_ORIGINS=https://yourdomain.com
-```
-
-> ⚠️ 請勿在生產環境使用預設的 `dev-secret-key-change-in-production`。
-
----
-
-## 系統審查紀錄（2026-05-03）
-
-### 本次審查結論
-
-| 項目 | 結果 |
-|------|------|
-| 架構完整性 | ✅ 前後端所有模組齊全 |
-| 自動化測試 | ✅ 79+ 測試，100% 通過率 |
-| Nessus 31 欄位 | ✅ 完整實作（model + parser + schema + tests） |
-| 資安加固 | ✅ Rate Limit、Security Headers、Audit Log 均已實作 |
-| 臨時檔案清理 | ✅ tmp_db_check.py、tmp_sa_check.py 已刪除 |
-| 文件同步 | ✅ 待修改.md 第六節更新為已完成 |
-
-### 修正項目
-
-- 刪除 `backend/tmp_db_check.py`、`backend/tmp_sa_check.py` 臨時除錯腳本
-- `待修改.md` 第六節 Nessus CSV 欄位擴充更新為 ✅ 已完成
-- `測試.md` 補充 2026-05-03 系統全面審查紀錄
-
----
-
-## 2026-04-28 修正重點
-
-### ✅ CORS 設定修正
-
-`backend/main.py` 的 CORS 已正確套用：
-
-- `allow_origins`（由 `ALLOWED_ORIGINS` 控制）
-- `allow_credentials`
-- `allow_methods`
-- `allow_headers`
-
-### ✅ API Client 重複邏輯精簡
-
-`api-client.js` 抽出 `reqForm()`：
-
-- `uploadScan()` / `uploadAudit()` 共用 FormData 請求流程
-- 401 未授權處理與錯誤訊息解析一致化
-
-### ✅ IP 群組更新重名防護
-
-`PUT /api/ipgroups/{id}` 現在會檢查是否重名，若衝突回傳 `409`。
-
-### ✅ 上傳資料必要欄位驗證
-
-- Nessus CSV：缺 `risk / host / name` 時回傳 `400`
-- Audit CSV：缺 `check_name / status` 時回傳 `400`
-
----
-
-## UI 可視性優化
-
-- 提高深色主題下邊框對比（已調整 `--border` / `--border-strong`）。
-- 強化輸入欄位 hover/focus 狀態（focus ring + 背景變化）。
-- Secondary / Ghost 按鈕加入明確邊框與 hover 狀態。
-- Card 與 Tab active 狀態增加可視層次（邊框、背景、陰影）。
-
----
-
-## 授權
-
-Internal use only.
+**v2.1.0** — 2026-05-04

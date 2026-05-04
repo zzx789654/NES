@@ -1,5 +1,6 @@
 """Parse Nessus CSV export into scan + vulnerability records."""
 import io
+import math
 from datetime import date
 
 import pandas as pd
@@ -97,12 +98,15 @@ def parse_nessus_csv(content: bytes, scan_name: str, scan_date: date | None = No
                 "cvss_v4_base", "cvss_v4_threat_score", "vpr"):
         df[col] = pd.to_numeric(df[col], errors="coerce").round(1)
 
-    # ── EPSS 4-decimal ────────────────────────────────────────────────────────
+    # ── EPSS 3-decimal ────────────────────────────────────────────────────────
     df["epss"] = pd.to_numeric(df["epss"], errors="coerce").round(3)
 
     # ── Date columns ──────────────────────────────────────────────────────────
     for col in ("plugin_publication_date", "plugin_modification_date"):
-        parsed = pd.to_datetime(df[col], errors="coerce")
+        try:
+            parsed = pd.to_datetime(df[col], errors="coerce", dayfirst=False, format="mixed")
+        except TypeError:
+            parsed = pd.to_datetime(df[col], errors="coerce", dayfirst=False)
         df[col] = [d.date() if not pd.isna(d) else None for d in parsed]
 
     # ── Bool columns ──────────────────────────────────────────────────────────
@@ -118,13 +122,22 @@ def parse_nessus_csv(content: bytes, scan_name: str, scan_date: date | None = No
     # ── Serialise: NaN → None ─────────────────────────────────────────────────
     vulns = df.where(pd.notnull(df), None).to_dict("records")
 
+    _NUMERIC_KEYS = (
+        "cvss_v2_base", "cvss_v2_temporal", "cvss_v3_base", "cvss_v3_temporal",
+        "cvss_v4_base", "cvss_v4_threat_score", "vpr", "epss",
+    )
     # Clean string fields: strip whitespace, convert 'nan' string → None
+    # Clean numeric fields: convert float NaN → None (pandas stores None as NaN in float cols)
     for v in vulns:
         for k in _STR_KEYS:
             val = v.get(k)
             if val is not None:
                 s = str(val).strip()
                 v[k] = s if s and s.lower() != "nan" else None
+        for k in _NUMERIC_KEYS:
+            val = v.get(k)
+            if isinstance(val, float) and math.isnan(val):
+                v[k] = None
 
     return {
         "name": scan_name,

@@ -81,36 +81,6 @@ _SLIM_COLS = (
 )
 
 
-@router.get("/{scan_id}", response_model=ScanDetailSlim)
-def get_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    scan = (
-        db.query(Scan)
-        .options(selectinload(Scan.vulnerabilities).load_only(*_SLIM_COLS))
-        .filter(Scan.id == scan_id)
-        .first()
-    )
-    if not scan:
-        raise HTTPException(status_code=404, detail="Scan not found")
-    return scan
-
-
-@router.get("/{scan_id}/vulns/{vuln_id}", response_model=VulnerabilityOut)
-def get_vuln_detail(
-    scan_id: int,
-    vuln_id: int,
-    db: Session = Depends(get_db),
-    _=Depends(get_current_user),
-):
-    vuln = (
-        db.query(Vulnerability)
-        .filter(Vulnerability.id == vuln_id, Vulnerability.scan_id == scan_id)
-        .first()
-    )
-    if not vuln:
-        raise HTTPException(status_code=404, detail="Vulnerability not found")
-    return vuln
-
-
 @router.get("/hosts/{host}/history", response_model=HostHistory)
 def get_host_history(host: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
     scans = (
@@ -156,6 +126,36 @@ def get_host_history(host: str, db: Session = Depends(get_db), _=Depends(get_cur
         first_seen=history[-1]["uploaded_at"] if history else None,
         last_seen=history[0]["uploaded_at"] if history else None,
     )
+
+
+@router.get("/{scan_id}", response_model=ScanDetailSlim)
+def get_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    scan = (
+        db.query(Scan)
+        .options(selectinload(Scan.vulnerabilities).load_only(*_SLIM_COLS))
+        .filter(Scan.id == scan_id)
+        .first()
+    )
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return scan
+
+
+@router.get("/{scan_id}/vulns/{vuln_id}", response_model=VulnerabilityOut)
+def get_vuln_detail(
+    scan_id: int,
+    vuln_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    vuln = (
+        db.query(Vulnerability)
+        .filter(Vulnerability.id == vuln_id, Vulnerability.scan_id == scan_id)
+        .first()
+    )
+    if not vuln:
+        raise HTTPException(status_code=404, detail="Vulnerability not found")
+    return vuln
 
 
 @router.delete("/{scan_id}", status_code=204)

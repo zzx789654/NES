@@ -134,7 +134,7 @@ class TestNessusFieldParsing:
 
         # Risk metrics
         assert vuln["vpr"] == 6.5
-        assert vuln["epss"] == 0.8234  # 4 decimals
+        assert vuln["epss"] == 0.823  # 3 decimals
 
         # Reference fields
         assert vuln["bid"] == "123456"
@@ -204,7 +204,7 @@ class TestNessusFieldParsing:
             "Host": "1.1.1.1",
             "CVSS v2.0 Base Score": "7.123456",  # Should round to 1 decimal
             "CVSS v3.0 Base Score": "8.999",  # Should round to 9.0
-            "EPSS Score": "0.123456789",  # Should round to 0.1235 (4 decimals)
+            "EPSS Score": "0.123456789",  # Should round to 0.123 (3 decimals)
         }
 
         csv_content = self._create_csv(nessus_header, [row])
@@ -213,7 +213,7 @@ class TestNessusFieldParsing:
         vuln = result["vulnerabilities"][0]
         assert vuln["cvss_v2_base"] == 7.1
         assert vuln["cvss_v3_base"] == 9.0
-        assert vuln["epss"] == 0.1235
+        assert vuln["epss"] == 0.123  # 3 decimal places (rounds 0.123456789 → 0.123)
 
     def test_date_format_flexibility(self, nessus_header):
         """Test multiple date format support."""

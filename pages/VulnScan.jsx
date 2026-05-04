@@ -350,6 +350,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
   const [expandedRow, setExpandedRow] = useState(null);
   const [expandedVulnDetail, setExpandedVulnDetail] = useState(null);
   const [expandedLoading, setExpandedLoading] = useState(false);
+  const [expandedError, setExpandedError] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -443,6 +444,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
       loadScanDetail(selectedId);
       setExpandedRow(null);
       setExpandedVulnDetail(null);
+      setExpandedError('');
     } else {
       setDetail(null);
     }
@@ -676,20 +678,22 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                 if (expandedRow?.id === row.id) {
                   setExpandedRow(null);
                   setExpandedVulnDetail(null);
+                  setExpandedError('');
                   return;
                 }
                 setExpandedRow(row);
                 setExpandedVulnDetail(null);
+                setExpandedError('');
                 setExpandedLoading(true);
                 APIClient.getVulnDetail(selectedId, row.id)
-                  .then(d => setExpandedVulnDetail(d))
-                  .catch(() => {})
+                  .then(d => { setExpandedVulnDetail(d); setExpandedError(''); })
+                  .catch(err => setExpandedError(err.message || '無法載入弱點詳情'))
                   .finally(() => setExpandedLoading(false));
               }} />
             </Card>
 
             {expandedRow && (
-              <Card title={`弱點詳情 — ${expandedRow.name}`} action={<Btn size="sm" variant="ghost" onClick={() => { setExpandedRow(null); setExpandedVulnDetail(null); }}>關閉 ×</Btn>}>
+              <Card title={`弱點詳情 — ${expandedRow.name}`} action={<Btn size="sm" variant="ghost" onClick={() => { setExpandedRow(null); setExpandedVulnDetail(null); setExpandedError(''); }}>關閉 ×</Btn>}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   <div>
                     <SectionDivider label="基本資訊" />
@@ -711,17 +715,20 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                       ))}
                     </div>
                     <SectionDivider label="摘要" />
-                    {expandedLoading
-                      ? <p style={{ fontSize: 12, color: 'var(--text3)' }}>載入中…</p>
+                    {expandedLoading ? <p style={{ fontSize: 12, color: 'var(--text3)' }}>載入中…</p>
+                      : expandedError ? <p style={{ fontSize: 12, color: 'var(--critical)' }}>{expandedError}</p>
                       : <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>{expandedVulnDetail?.synopsis || '—'}</p>}
                     <SectionDivider label="修補建議" />
-                    <p style={{ fontSize: 13, lineHeight: 1.6 }}>{expandedVulnDetail?.solution || '—'}</p>
+                    {expandedLoading ? <p style={{ fontSize: 12, color: 'var(--text3)' }}>載入中…</p>
+                      : <p style={{ fontSize: 13, lineHeight: 1.6 }}>{expandedVulnDetail?.solution || '—'}</p>}
                   </div>
                   <div>
                     <SectionDivider label="說明" />
-                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>{expandedVulnDetail?.description || '—'}</p>
+                    {expandedLoading ? <p style={{ fontSize: 12, color: 'var(--text3)' }}>載入中…</p>
+                      : <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>{expandedVulnDetail?.description || '—'}</p>}
                     <SectionDivider label="Plugin Output" />
-                    <pre style={{ fontSize: 11, fontFamily: 'var(--font-mono)', background: 'var(--surface2)', padding: '10px 12px', borderRadius: 'var(--rsm)', overflow: 'auto', maxHeight: 150, color: 'var(--accent)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{expandedVulnDetail?.plugin_output || '—'}</pre>
+                    {expandedLoading ? <p style={{ fontSize: 12, color: 'var(--text3)' }}>載入中…</p>
+                      : <pre style={{ fontSize: 11, fontFamily: 'var(--font-mono)', background: 'var(--surface2)', padding: '10px 12px', borderRadius: 'var(--rsm)', overflow: 'auto', maxHeight: 150, color: 'var(--accent)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{expandedVulnDetail?.plugin_output || '—'}</pre>}
                   </div>
                 </div>
               </Card>
