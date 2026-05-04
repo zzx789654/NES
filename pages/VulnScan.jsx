@@ -3,6 +3,19 @@
 const { useState, useEffect, useMemo, useRef } = React;
 
 const SEV_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3, Info: 4 };
+
+// Compare IP addresses numerically (handles IPv4; falls back to string compare)
+function compareIP(a, b) {
+  const toNum = ip => {
+    if (!ip) return -1;
+    const parts = String(ip).split('.');
+    if (parts.length !== 4) return -1;
+    return parts.reduce((acc, p) => acc * 256 + (parseInt(p, 10) || 0), 0);
+  };
+  const na = toNum(a), nb = toNum(b);
+  if (na !== -1 && nb !== -1) return na - nb;
+  return String(a || '').localeCompare(String(b || ''));
+}
 const SEV_COLOR = {
   Critical: 'oklch(0.60 0.22 25)',
   High: 'oklch(0.68 0.20 45)',
@@ -501,7 +514,11 @@ function VulnScanPage({ onStatsChange, currentUser }) {
           .filter(Boolean)
           .some(field => String(field).toLowerCase().includes(term));
       })
-      .sort((a, b) => (SEV_ORDER[a.risk] ?? 99) - (SEV_ORDER[b.risk] ?? 99));
+      .sort((a, b) => {
+        const ipCmp = compareIP(a.host, b.host);
+        if (ipCmp !== 0) return ipCmp;
+        return (SEV_ORDER[a.risk] ?? 99) - (SEV_ORDER[b.risk] ?? 99);
+      });
   }, [activeVulns, search, sevFilter]);
 
   const diffRows = useMemo(() => {
@@ -524,7 +541,12 @@ function VulnScanPage({ onStatsChange, currentUser }) {
           .filter(Boolean)
           .some(field => String(field).toLowerCase().includes(term));
       })
-      .filter(row => selectedIPs.length === 0 || selectedIPs.includes(row.host));
+      .filter(row => selectedIPs.length === 0 || selectedIPs.includes(row.host))
+      .sort((a, b) => {
+        const ipCmp = compareIP(a.host, b.host);
+        if (ipCmp !== 0) return ipCmp;
+        return (SEV_ORDER[a.risk] ?? 99) - (SEV_ORDER[b.risk] ?? 99);
+      });
   }, [diffRows, diffFilter, search, selectedIPs]);
 
   const diffCounts = useMemo(() => ({
