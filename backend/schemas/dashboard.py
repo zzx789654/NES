@@ -25,3 +25,6 @@ class DashboardSummary(BaseModel):
     audit_scan_count: int
     latest_scan_date: str | None
     latest_audit_date: str | None
+    latest_scan_id: int | None = None
+    latest_scan_name: str | None = None
+    latest_scan_host_count: int | None = None

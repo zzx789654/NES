@@ -46,7 +46,7 @@ def get_audit_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(get_cu
 def delete_audit_scan(
     scan_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_role("admin", "analyst")),
+    _=Depends(require_role("admin")),
 ):
     scan = db.query(AuditScan).filter(AuditScan.id == scan_id).first()
     if not scan:
