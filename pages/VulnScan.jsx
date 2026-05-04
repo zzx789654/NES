@@ -330,14 +330,23 @@ function VulnScanPage({ onStatsChange, currentUser }) {
   const [hostHistory, setHostHistory] = useState(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [sevFilter, setSevFilter] = useState('all');
   const [visibleCols, setVisibleCols] = useState(['risk', 'host', 'port', 'plugin_id', 'name', 'cve', 'cvss_v3_base', 'epss', 'vpr']);
   const [expandedRow, setExpandedRow] = useState(null);
+  const [expandedVulnDetail, setExpandedVulnDetail] = useState(null);
+  const [expandedLoading, setExpandedLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(null);
+
+  // Debounce search input — avoid re-filtering on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 220);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   const loadScans = () => {
     setLoading(true);
@@ -419,6 +428,8 @@ function VulnScanPage({ onStatsChange, currentUser }) {
   useEffect(() => {
     if (selectedId) {
       loadScanDetail(selectedId);
+      setExpandedRow(null);
+      setExpandedVulnDetail(null);
     } else {
       setDetail(null);
     }
@@ -575,7 +586,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
 
       <Tabs
         active={tab}
-        onChange={t => { setTab(t); setError(''); setSearch(''); setSevFilter('all'); }}
+        onChange={t => { setTab(t); setError(''); setSearchInput(''); setSearch(''); setSevFilter('all'); }}
         tabs={[
           { id: 'history', label: '掃描結果', icon: '📋', count: selectedScan?.vuln_count ?? 0 },
           { id: 'hosthistory', label: '主機歷程', icon: '🖥️', count: hostHistory?.total_scans ?? undefined },
@@ -604,7 +615,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                 <option value="all">全部等級</option>
                 {['Critical', 'High', 'Medium', 'Low', 'Info'].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
-              <SearchBar value={search} onChange={setSearch} placeholder="搜尋 IP / 弱點名稱 / CVE…" />
+              <SearchBar value={searchInput} onChange={setSearchInput} placeholder="搜尋 IP / 弱點名稱 / CVE…" />
               <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text2)', fontFamily: 'var(--font-mono)' }}>
                 {filteredVulns.length} 筆{selectedIPs.length > 0 ? ` · ${selectedIPs.length} IP 篩選中` : ''}
               </span>
@@ -638,11 +649,24 @@ function VulnScanPage({ onStatsChange, currentUser }) {
             </div>
 
             <Card noPad>
-              <DataTable columns={columns} rows={filteredVulns} maxHeight={520} onRowClick={row => setExpandedRow(expandedRow?.id === row.id ? null : row)} />
+              <DataTable columns={columns} rows={filteredVulns} maxHeight={520} onRowClick={row => {
+                if (expandedRow?.id === row.id) {
+                  setExpandedRow(null);
+                  setExpandedVulnDetail(null);
+                  return;
+                }
+                setExpandedRow(row);
+                setExpandedVulnDetail(null);
+                setExpandedLoading(true);
+                APIClient.getVulnDetail(selectedId, row.id)
+                  .then(d => setExpandedVulnDetail(d))
+                  .catch(() => {})
+                  .finally(() => setExpandedLoading(false));
+              }} />
             </Card>
 
             {expandedRow && (
-              <Card title={`弱點詳情 — ${expandedRow.name}`} action={<Btn size="sm" variant="ghost" onClick={() => setExpandedRow(null)}>關閉 ×</Btn>}>
+              <Card title={`弱點詳情 — ${expandedRow.name}`} action={<Btn size="sm" variant="ghost" onClick={() => { setExpandedRow(null); setExpandedVulnDetail(null); }}>關閉 ×</Btn>}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   <div>
                     <SectionDivider label="基本資訊" />
@@ -663,15 +687,17 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                       ))}
                     </div>
                     <SectionDivider label="摘要" />
-                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>{expandedRow.synopsis || '—'}</p>
+                    {expandedLoading
+                      ? <p style={{ fontSize: 12, color: 'var(--text3)' }}>載入中…</p>
+                      : <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>{expandedVulnDetail?.synopsis || '—'}</p>}
                     <SectionDivider label="修補建議" />
-                    <p style={{ fontSize: 13, lineHeight: 1.6 }}>{expandedRow.solution || '—'}</p>
+                    <p style={{ fontSize: 13, lineHeight: 1.6 }}>{expandedVulnDetail?.solution || '—'}</p>
                   </div>
                   <div>
                     <SectionDivider label="說明" />
-                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>{expandedRow.description || '—'}</p>
+                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>{expandedVulnDetail?.description || '—'}</p>
                     <SectionDivider label="Plugin Output" />
-                    <pre style={{ fontSize: 11, fontFamily: 'var(--font-mono)', background: 'var(--surface2)', padding: '10px 12px', borderRadius: 'var(--rsm)', overflow: 'auto', maxHeight: 150, color: 'var(--accent)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{expandedRow.plugin_output || '—'}</pre>
+                    <pre style={{ fontSize: 11, fontFamily: 'var(--font-mono)', background: 'var(--surface2)', padding: '10px 12px', borderRadius: 'var(--rsm)', overflow: 'auto', maxHeight: 150, color: 'var(--accent)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{expandedVulnDetail?.plugin_output || '—'}</pre>
                   </div>
                 </div>
               </Card>
@@ -859,7 +885,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                   {scans.map(scan => <option key={scan.id} value={scan.id}>{scan.name}</option>)}
                 </select>
               </div>
-              <SearchBar value={search} onChange={setSearch} placeholder="搜尋 IP / 弱點名稱 / CVE…" />
+              <SearchBar value={searchInput} onChange={setSearchInput} placeholder="搜尋 IP / 弱點名稱 / CVE…" />
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {[

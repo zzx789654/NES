@@ -127,6 +127,10 @@ const APIClient = (() => {
       return req('/api/scans/' + id);
     },
 
+    getVulnDetail(scanId, vulnId) {
+      return req('/api/scans/' + scanId + '/vulns/' + vulnId);
+    },
+
     deleteScan(id) {
       return req('/api/scans/' + id, { method: 'DELETE' });
     },

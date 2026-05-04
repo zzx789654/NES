@@ -3,13 +3,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import insert, nulls_last
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, load_only, selectinload
 
 from database import get_db
 from limiter import limiter
 from models.scan import Scan, Vulnerability
 from routers.auth import get_current_user, require_role
-from schemas.scan import ScanOut, ScanDetail, ScanDiff, HostHistory
+from schemas.scan import ScanOut, ScanDetail, ScanDetailSlim, ScanDiff, HostHistory, VulnerabilityOut
 from services.nessus_parser import parse_nessus_csv
 from services.cve_parser import parse_nvd_json
 from services.diff_service import diff_scans
@@ -63,17 +63,50 @@ def scan_diff(
     )
 
 
-@router.get("/{scan_id}", response_model=ScanDetail)
+_SLIM_COLS = (
+    Vulnerability.id,
+    Vulnerability.scan_id,
+    Vulnerability.plugin_id,
+    Vulnerability.cve,
+    Vulnerability.risk,
+    Vulnerability.host,
+    Vulnerability.port,
+    Vulnerability.protocol,
+    Vulnerability.name,
+    Vulnerability.cvss_v3_base,
+    Vulnerability.epss,
+    Vulnerability.vpr,
+)
+
+
+@router.get("/{scan_id}", response_model=ScanDetailSlim)
 def get_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
     scan = (
         db.query(Scan)
-        .options(selectinload(Scan.vulnerabilities))
+        .options(selectinload(Scan.vulnerabilities).load_only(*_SLIM_COLS))
         .filter(Scan.id == scan_id)
         .first()
     )
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
     return scan
+
+
+@router.get("/{scan_id}/vulns/{vuln_id}", response_model=VulnerabilityOut)
+def get_vuln_detail(
+    scan_id: int,
+    vuln_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    vuln = (
+        db.query(Vulnerability)
+        .filter(Vulnerability.id == vuln_id, Vulnerability.scan_id == scan_id)
+        .first()
+    )
+    if not vuln:
+        raise HTTPException(status_code=404, detail="Vulnerability not found")
+    return vuln
 
 
 @router.get("/hosts/{host}/history", response_model=HostHistory)

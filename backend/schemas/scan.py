@@ -59,6 +59,24 @@ class VulnerabilityOut(VulnerabilityBase):
     model_config = {"from_attributes": True}
 
 
+class VulnSlim(BaseModel):
+    """Table-view fields only — ~62% smaller than full VulnerabilityOut."""
+    id: int
+    scan_id: int
+    plugin_id: str | None = None
+    cve: str | None = None
+    risk: str | None = None
+    host: str | None = None
+    port: str | None = None
+    protocol: str | None = None
+    name: str | None = None
+    cvss_v3_base: float | None = None
+    epss: float | None = None
+    vpr: float | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class ScanBase(BaseModel):
     name: str
     source: str
@@ -83,6 +101,10 @@ class ScanOut(ScanBase):
 
 class ScanDetail(ScanOut):
     vulnerabilities: list[VulnerabilityOut] = []
+
+
+class ScanDetailSlim(ScanOut):
+    vulnerabilities: list[VulnSlim] = []
 
 
 class HostHistoryEntry(BaseModel):

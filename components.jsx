@@ -197,8 +197,12 @@ function Card({ children, style: extra, title, action, noPad }) {
 
 // ─── DataTable ────────────────────────────────────────────────────────────────
 function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeight, compact }) {
+  const ROW_H = compact ? 34 : 42;
+  const OVERSCAN = 6;
+
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
+  const [scrollTop, setScrollTop] = useState(0);
 
   const sorted = React.useMemo(() => {
     if (!sortCol) return rows;
@@ -209,6 +213,15 @@ function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeig
     });
   }, [rows, sortCol, sortDir]);
 
+  // Reset scroll position when data changes
+  const prevRowsLen = useRef(rows.length);
+  useEffect(() => {
+    if (rows.length !== prevRowsLen.current) {
+      setScrollTop(0);
+      prevRowsLen.current = rows.length;
+    }
+  }, [rows.length]);
+
   const handleSort = col => {
     if (!col.sortable) return;
     if (sortCol === col.key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -217,14 +230,24 @@ function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeig
 
   const cellPad = compact ? '6px 12px' : '10px 14px';
 
+  // Virtual window — only render rows visible in the scroll viewport
+  const startIdx = maxHeight ? Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN) : 0;
+  const endIdx   = maxHeight
+    ? Math.min(sorted.length, Math.floor(scrollTop / ROW_H) + Math.ceil(maxHeight / ROW_H) + OVERSCAN)
+    : sorted.length;
+  const slice      = sorted.slice(startIdx, endIdx);
+  const padTop     = startIdx * ROW_H;
+  const padBottom  = Math.max(0, (sorted.length - endIdx) * ROW_H);
+
   return (
-    <div style={{overflow:'auto',maxHeight}}>
+    <div style={{overflow:'auto', maxHeight}}
+         onScroll={e => setScrollTop(e.currentTarget.scrollTop)}>
       <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
         <thead>
           <tr>
             {columns.map(col => (
               <th key={col.key} onClick={() => handleSort(col)}
-                style={{padding:cellPad,textAlign:'left',fontWeight:600,fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text2)',background:'var(--surface2)',borderBottom:'1px solid var(--border)',cursor:col.sortable?'pointer':'default',whiteSpace:'nowrap',position:'sticky',top:0}}>
+                style={{padding:cellPad,textAlign:'left',fontWeight:600,fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text2)',background:'var(--surface2)',borderBottom:'1px solid var(--border)',cursor:col.sortable?'pointer':'default',whiteSpace:'nowrap',position:'sticky',top:0,zIndex:1}}>
                 {col.label}{col.sortable && (sortCol===col.key ? (sortDir==='asc'?' ↑':' ↓') : ' ↕')}
               </th>
             ))}
@@ -233,18 +256,23 @@ function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeig
         <tbody>
           {sorted.length === 0
             ? <tr><td colSpan={columns.length} style={{padding:'32px',textAlign:'center',color:'var(--text3)',fontStyle:'italic'}}>{emptyText}</td></tr>
-            : sorted.map((row, i) => (
-              <tr key={row.id || i} onClick={() => onRowClick && onRowClick(row)}
-                style={{borderBottom:'1px solid var(--border)',cursor:onRowClick?'pointer':'default',transition:'background 0.1s'}}
-                onMouseEnter={e=>e.currentTarget.style.background='var(--surface2)'}
-                onMouseLeave={e=>e.currentTarget.style.background=''}>
-                {columns.map(col => (
-                  <td key={col.key} style={{padding:cellPad,verticalAlign:'middle',color:'var(--text)',fontFamily:col.mono?'var(--font-mono)':'var(--font-sans)',fontSize:col.mono?12:13,maxWidth:col.maxWidth||'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:col.wrap?'normal':'nowrap'}}>
-                    {col.render ? col.render(row[col.key], row) : (row[col.key] ?? '—')}
-                  </td>
+            : <>
+                {padTop > 0 && <tr style={{height:padTop}}><td colSpan={columns.length} style={{padding:0,border:'none'}} /></tr>}
+                {slice.map((row, i) => (
+                  <tr key={row.id ?? startIdx + i}
+                    style={{height:ROW_H,borderBottom:'1px solid var(--border)',cursor:onRowClick?'pointer':'default'}}
+                    onClick={() => onRowClick && onRowClick(row)}
+                    onMouseEnter={e=>e.currentTarget.style.background='var(--surface2)'}
+                    onMouseLeave={e=>e.currentTarget.style.background=''}>
+                    {columns.map(col => (
+                      <td key={col.key} style={{padding:cellPad,verticalAlign:'middle',color:'var(--text)',fontFamily:col.mono?'var(--font-mono)':'var(--font-sans)',fontSize:col.mono?12:13,maxWidth:col.maxWidth||'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:col.wrap?'normal':'nowrap'}}>
+                        {col.render ? col.render(row[col.key], row) : (row[col.key] ?? '—')}
+                      </td>
+                    ))}
+                  </tr>
                 ))}
-              </tr>
-            ))
+                {padBottom > 0 && <tr style={{height:padBottom}}><td colSpan={columns.length} style={{padding:0,border:'none'}} /></tr>}
+              </>
           }
         </tbody>
       </table>
