@@ -148,11 +148,9 @@ async def upload_scan(
     if not name:
         name = filename or "Uploaded Scan"
 
-    # File size guard
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File too large. Maximum allowed size is 50 MB")
 
-    # Basic content sanity check
     if filename_lower.endswith(".csv"):
         if not content or content[:1] not in (b'"', b"'") and not (32 <= content[0] <= 126):
             raise HTTPException(status_code=400, detail="Invalid CSV content")
@@ -193,11 +191,17 @@ async def upload_scan(
     db.add(scan)
     db.flush()
 
-    cves = [v["cve"] for v in parsed["vulnerabilities"] if v.get("cve")]
-    epss_map = await fetch_epss_scores(cves)
+    # Only fetch EPSS from API for CVEs that don't already have a value from the CSV
+    cves_missing_epss = [
+        v["cve"] for v in parsed["vulnerabilities"]
+        if v.get("cve") and v.get("epss") is None
+    ]
+    epss_map = await fetch_epss_scores(cves_missing_epss)
 
     for v in parsed["vulnerabilities"]:
         cve = (v.get("cve") or "").upper()
+        # Prefer EPSS value from CSV; fall back to API lookup
+        epss_val = v.get("epss") if v.get("epss") is not None else epss_map.get(cve)
         vuln = Vulnerability(
             scan_id=scan.id,
             plugin_id=v.get("plugin_id"),
@@ -221,7 +225,7 @@ async def upload_scan(
             cvss_v4_base=v.get("cvss_v4_base"),
             cvss_v4_threat_score=v.get("cvss_v4_threat_score"),
             vpr=v.get("vpr"),
-            epss=epss_map.get(cve),
+            epss=epss_val,
             bid=v.get("bid"),
             xref=v.get("xref"),
             mskb=v.get("mskb"),

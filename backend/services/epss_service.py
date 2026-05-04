@@ -14,9 +14,10 @@ async def fetch_epss_scores(cves: list[str]) -> dict[str, float]:
         return {}
 
     results: dict[str, float] = {}
-    # API accepts up to 100 CVEs per request
     chunk_size = 100
-    async with httpx.AsyncClient(timeout=15) as client:
+    # Use a short connect timeout + per-request timeout to avoid blocking uploads
+    timeout = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
         for i in range(0, len(valid), chunk_size):
             chunk = valid[i : i + chunk_size]
             params = {"cve": ",".join(chunk)}
