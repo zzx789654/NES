@@ -497,7 +497,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
 
   const selectedScan = scans.find(scan => scan.id === selectedId);
   const vulnRows = detail?.vulnerabilities || [];
-  const allHosts = useMemo(() => [...new Set(vulnRows.map(v => v.host).filter(Boolean))], [vulnRows]);
+  const allHosts = useMemo(() => [...new Set(vulnRows.map(v => v.host).filter(Boolean))].sort(compareIP), [vulnRows]);
 
   const activeVulns = useMemo(() => {
     if (selectedIPs.length === 0) return vulnRows;
