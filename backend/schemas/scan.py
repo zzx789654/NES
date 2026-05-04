@@ -70,6 +70,7 @@ class VulnSlim(BaseModel):
     port: str | None = None
     protocol: str | None = None
     name: str | None = None
+    cvss_v2_base: float | None = None
     cvss_v3_base: float | None = None
     epss: float | None = None
     vpr: float | None = None

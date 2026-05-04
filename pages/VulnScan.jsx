@@ -333,7 +333,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [sevFilter, setSevFilter] = useState('all');
-  const [visibleCols, setVisibleCols] = useState(['risk', 'host', 'port', 'plugin_id', 'name', 'cve', 'cvss_v3_base', 'epss', 'vpr']);
+  const [visibleCols, setVisibleCols] = useState(['risk', 'host', 'port', 'plugin_id', 'name', 'cve', 'cvss_v2_base', 'cvss_v3_base', 'epss', 'vpr']);
   const [expandedRow, setExpandedRow] = useState(null);
   const [expandedVulnDetail, setExpandedVulnDetail] = useState(null);
   const [expandedLoading, setExpandedLoading] = useState(false);
@@ -541,7 +541,8 @@ function VulnScanPage({ onStatsChange, currentUser }) {
     { key: 'plugin_id', label: 'Plugin ID' },
     { key: 'name', label: '弱點名稱' },
     { key: 'cve', label: 'CVE' },
-    { key: 'cvss_v3_base', label: 'CVSS' },
+    { key: 'cvss_v2_base', label: 'CVSS v2' },
+    { key: 'cvss_v3_base', label: 'CVSS v3' },
     { key: 'epss', label: 'EPSS' },
     { key: 'vpr', label: 'VPR' },
     { key: 'synopsis', label: '摘要' },
@@ -551,11 +552,11 @@ function VulnScanPage({ onStatsChange, currentUser }) {
   const columns = ALL_COLS.filter(c => visibleCols.includes(c.key)).map(c => ({
     ...c,
     sortable: true,
-    mono: ['host', 'port', 'plugin_id', 'cve', 'cvss_v3_base', 'epss', 'vpr'].includes(c.key),
+    mono: ['host', 'port', 'plugin_id', 'cve', 'cvss_v2_base', 'cvss_v3_base', 'epss', 'vpr'].includes(c.key),
     render: c.key === 'risk' ? v => <SeverityBadge level={v || 'Info'} />
       : c.key === 'epss' ? v => v != null ? <span style={{ color: parseFloat(v) >= 0.1 ? 'var(--critical)' : parseFloat(v) >= 0.01 ? 'var(--warning)' : 'var(--text2)', fontWeight: parseFloat(v) >= 0.1 ? 700 : 400 }}>{parseFloat(v).toFixed(3)}</span> : <span style={{ color: 'var(--text3)' }}>—</span>
       : c.key === 'vpr' ? v => v != null ? <span style={{ color: parseFloat(v) >= 7 ? 'var(--critical)' : parseFloat(v) >= 4 ? 'var(--warning)' : 'var(--text2)', fontWeight: parseFloat(v) >= 7 ? 700 : 400 }}>{parseFloat(v).toFixed(1)}</span> : <span style={{ color: 'var(--text3)' }}>—</span>
-      : c.key === 'cvss_v3_base' ? v => v != null ? <span style={{ color: 'var(--text2)', fontFamily: 'var(--font-mono)' }}>{parseFloat(v).toFixed(1)}</span> : <span style={{ color: 'var(--text3)' }}>—</span>
+      : (c.key === 'cvss_v2_base' || c.key === 'cvss_v3_base') ? v => v != null ? <span style={{ color: 'var(--text2)', fontFamily: 'var(--font-mono)' }}>{parseFloat(v).toFixed(1)}</span> : <span style={{ color: 'var(--text3)' }}>—</span>
       : c.key === 'name' ? v => <span title={v} style={{ fontWeight: 500 }}>{v?.length > 60 ? v.slice(0, 58) + '…' : v}</span>
       : undefined,
   }));
@@ -676,7 +677,8 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                         ['連接埠', `${expandedRow.port || '-'} / ${expandedRow.protocol || '-'}`],
                         ['Plugin ID', expandedRow.plugin_id],
                         ['CVE', expandedRow.cve || '—'],
-                        ['CVSS', expandedRow.cvss_v3_base != null ? parseFloat(expandedRow.cvss_v3_base).toFixed(1) : '—'],
+                        ['CVSS v2', expandedRow.cvss_v2_base != null ? parseFloat(expandedRow.cvss_v2_base).toFixed(1) : '—'],
+                        ['CVSS v3', expandedRow.cvss_v3_base != null ? parseFloat(expandedRow.cvss_v3_base).toFixed(1) : '—'],
                         ['EPSS', expandedRow.epss != null ? parseFloat(expandedRow.epss).toFixed(3) : '—'],
                         ['VPR', expandedRow.vpr != null ? parseFloat(expandedRow.vpr).toFixed(1) : '—'],
                       ].map(([key, value]) => (
