@@ -717,7 +717,9 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                     <SectionDivider label="摘要" />
                     {expandedLoading ? <p style={{ fontSize: 12, color: 'var(--text3)' }}>載入中…</p>
                       : expandedError ? <p style={{ fontSize: 12, color: 'var(--critical)' }}>{expandedError}</p>
-                      : <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>{expandedVulnDetail?.synopsis || '—'}</p>}
+                      : expandedVulnDetail && !expandedVulnDetail.synopsis && !expandedVulnDetail.description && !expandedVulnDetail.solution
+                        ? <p style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>此掃描未包含文字欄位（Synopsis / Description / Solution），請確認 Nessus 匯出時已勾選完整欄位。</p>
+                        : <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>{expandedVulnDetail?.synopsis || '—'}</p>}
                     <SectionDivider label="修補建議" />
                     {expandedLoading ? <p style={{ fontSize: 12, color: 'var(--text3)' }}>載入中…</p>
                       : <p style={{ fontSize: 13, lineHeight: 1.6 }}>{expandedVulnDetail?.solution || '—'}</p>}
@@ -982,9 +984,12 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                 <div style={{ marginTop: 12, background: 'var(--surface2)', borderRadius: 'var(--r)', padding: '12px', fontSize: 11, color: 'var(--text3)' }}>
                   <div style={{ fontWeight: 600, marginBottom: 6 }}>支援欄位：</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-                    {['Plugin ID', 'CVE', 'Risk', 'Host', 'Port', 'Protocol', 'Name', 'CVSS v3.0 Base Score', 'EPSS Score', 'VPR Score'].map(col => (
+                    {['Plugin ID', 'CVE', 'Risk', 'Host', 'Port', 'Protocol', 'Name', 'Synopsis', 'Description', 'Solution', 'Plugin Output', 'CVSS v2.0 Base Score', 'CVSS v3.0 Base Score', 'EPSS Score', 'VPR Score'].map(col => (
                       <div key={col}><span style={{ color: 'var(--accent)' }}>{col}</span></div>
                     ))}
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 10, color: 'var(--text3)', fontStyle: 'italic' }}>
+                    匯出 Nessus CSV 時請勾選「Complete」模式以包含 Synopsis / Description / Solution / Plugin Output 欄位，否則弱點詳情文字欄位將為空白。
                   </div>
                 </div>
               </Card>
