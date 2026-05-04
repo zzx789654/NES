@@ -2,7 +2,7 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from sqlalchemy import nulls_last
+from sqlalchemy import insert, nulls_last
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
@@ -198,44 +198,46 @@ async def upload_scan(
     ]
     epss_map = await fetch_epss_scores(cves_missing_epss)
 
+    vuln_rows = []
     for v in parsed["vulnerabilities"]:
         cve = (v.get("cve") or "").upper()
-        # Prefer EPSS value from CSV; fall back to API lookup
         epss_val = v.get("epss") if v.get("epss") is not None else epss_map.get(cve)
-        vuln = Vulnerability(
-            scan_id=scan.id,
-            plugin_id=v.get("plugin_id"),
-            cve=v.get("cve"),
-            risk=v.get("risk"),
-            risk_factor=v.get("risk_factor"),
-            stig_severity=v.get("stig_severity"),
-            host=v.get("host"),
-            port=v.get("port"),
-            protocol=v.get("protocol"),
-            name=v.get("name"),
-            synopsis=v.get("synopsis"),
-            description=v.get("description"),
-            solution=v.get("solution"),
-            plugin_output=v.get("plugin_output"),
-            see_also=v.get("see_also"),
-            cvss_v2_base=v.get("cvss_v2_base"),
-            cvss_v2_temporal=v.get("cvss_v2_temporal"),
-            cvss_v3_base=v.get("cvss_v3_base") or v.get("cvss"),
-            cvss_v3_temporal=v.get("cvss_v3_temporal"),
-            cvss_v4_base=v.get("cvss_v4_base"),
-            cvss_v4_threat_score=v.get("cvss_v4_threat_score"),
-            vpr=v.get("vpr"),
-            epss=epss_val,
-            bid=v.get("bid"),
-            xref=v.get("xref"),
-            mskb=v.get("mskb"),
-            plugin_publication_date=v.get("plugin_publication_date"),
-            plugin_modification_date=v.get("plugin_modification_date"),
-            metasploit=v.get("metasploit", False),
-            core_impact=v.get("core_impact", False),
-            canvas=v.get("canvas", False),
-        )
-        db.add(vuln)
+        vuln_rows.append({
+            "scan_id":                  scan.id,
+            "plugin_id":                v.get("plugin_id"),
+            "cve":                      v.get("cve"),
+            "risk":                     v.get("risk"),
+            "risk_factor":              v.get("risk_factor"),
+            "stig_severity":            v.get("stig_severity"),
+            "host":                     v.get("host"),
+            "port":                     v.get("port"),
+            "protocol":                 v.get("protocol"),
+            "name":                     v.get("name"),
+            "synopsis":                 v.get("synopsis"),
+            "description":              v.get("description"),
+            "solution":                 v.get("solution"),
+            "plugin_output":            v.get("plugin_output"),
+            "see_also":                 v.get("see_also"),
+            "cvss_v2_base":             v.get("cvss_v2_base"),
+            "cvss_v2_temporal":         v.get("cvss_v2_temporal"),
+            "cvss_v3_base":             v.get("cvss_v3_base") or v.get("cvss"),
+            "cvss_v3_temporal":         v.get("cvss_v3_temporal"),
+            "cvss_v4_base":             v.get("cvss_v4_base"),
+            "cvss_v4_threat_score":     v.get("cvss_v4_threat_score"),
+            "vpr":                      v.get("vpr"),
+            "epss":                     epss_val,
+            "bid":                      v.get("bid"),
+            "xref":                     v.get("xref"),
+            "mskb":                     v.get("mskb"),
+            "plugin_publication_date":  v.get("plugin_publication_date"),
+            "plugin_modification_date": v.get("plugin_modification_date"),
+            "metasploit":               v.get("metasploit", False),
+            "core_impact":              v.get("core_impact", False),
+            "canvas":                   v.get("canvas", False),
+        })
+
+    if vuln_rows:
+        db.execute(insert(Vulnerability), vuln_rows)
 
     db.commit()
     db.refresh(scan)
