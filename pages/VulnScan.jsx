@@ -897,7 +897,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                 <select value={diffBase || ''} onChange={e => setDiffBase(Number(e.target.value) || null)}
                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 'var(--rsm)', padding: '7px 10px', fontSize: 13 }}>
                   <option value="">選擇基準掃描</option>
-                  {scans.map(scan => <option key={scan.id} value={scan.id}>{scan.name}</option>)}
+                  {scans.map(scan => <option key={scan.id} value={scan.id}>{scan.name}{scan.uploaded_at ? ' · ' + scan.uploaded_at.slice(0, 10) : ''}</option>)}
                 </select>
               </div>
               <span style={{ fontSize: 18, color: 'var(--text3)' }}>→</span>
@@ -906,7 +906,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                 <select value={diffComp || ''} onChange={e => setDiffComp(Number(e.target.value) || null)}
                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 'var(--rsm)', padding: '7px 10px', fontSize: 13 }}>
                   <option value="">選擇比較掃描</option>
-                  {scans.map(scan => <option key={scan.id} value={scan.id}>{scan.name}</option>)}
+                  {scans.map(scan => <option key={scan.id} value={scan.id}>{scan.name}{scan.uploaded_at ? ' · ' + scan.uploaded_at.slice(0, 10) : ''}</option>)}
                 </select>
               </div>
               <SearchBar value={searchInput} onChange={setSearchInput} placeholder="搜尋 IP / 弱點名稱 / CVE…" />
