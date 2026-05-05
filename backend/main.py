@@ -27,6 +27,12 @@ logger = logging.getLogger("main")
 
 def _run_migrations() -> None:
     """Apply any pending Alembic migrations before serving traffic."""
+    # In testing mode, skip Alembic and use Base.metadata.create_all()
+    if os.getenv("TESTING", "").lower() == "true":
+        Base.metadata.create_all(bind=engine)
+        logger.info("Testing mode: used create_all() instead of Alembic")
+        return
+
     alembic_ini = os.path.join(os.path.dirname(__file__), "alembic.ini")
     if not os.path.exists(alembic_ini):
         # Fallback for environments without alembic config (e.g. bare dev clone)

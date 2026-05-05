@@ -98,11 +98,11 @@ def parse_nessus_csv(content: bytes, scan_name: str, scan_date: date | None = No
         df[col] = pd.to_numeric(df[col], errors="coerce").round(1)
 
     # ── EPSS 4-decimal ────────────────────────────────────────────────────────
-    df["epss"] = pd.to_numeric(df["epss"], errors="coerce").round(3)
+    df["epss"] = pd.to_numeric(df["epss"], errors="coerce").round(4)
 
     # ── Date columns ──────────────────────────────────────────────────────────
     for col in ("plugin_publication_date", "plugin_modification_date"):
-        parsed = pd.to_datetime(df[col], errors="coerce")
+        parsed = pd.to_datetime(df[col], errors="coerce", format="mixed", dayfirst=False)
         df[col] = [d.date() if not pd.isna(d) else None for d in parsed]
 
     # ── Bool columns ──────────────────────────────────────────────────────────
@@ -116,7 +116,17 @@ def parse_nessus_csv(content: bytes, scan_name: str, scan_date: date | None = No
     df["cvss"] = df["cvss_v3_base"]
 
     # ── Serialise: NaN → None ─────────────────────────────────────────────────
-    vulns = df.where(pd.notnull(df), None).to_dict("records")
+    vulns = []
+    for _, row in df.iterrows():
+        v_dict = {}
+        for key in df.columns:
+            val = row[key]
+            # Convert pandas NaN to None
+            if pd.isna(val):
+                v_dict[key] = None
+            else:
+                v_dict[key] = val
+        vulns.append(v_dict)
 
     # Clean string fields: strip whitespace, convert 'nan' string → None
     for v in vulns:

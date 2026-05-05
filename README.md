@@ -223,6 +223,48 @@ ALLOWED_ORIGINS=https://yourdomain.com
 
 ---
 
+## 系統審查紀錄（2026-05-05 Bug Fix & Verification）
+
+### 關鍵修復：HTTP 500 弱點掃描上傳問題
+
+#### 根本原因
+| 問題 | 影響 |
+|------|------|
+| Alembic migration schema 不完整（16 欄位 vs 31 欄位） | 上傳時 SQL OperationalError |
+| 測試環境無法隔離 Alembic 執行 | 重複執行 migration → 表已存在 |
+| Parser 精度和格式不匹配 | EPSS 四捨五入、日期格式、NaN 轉換錯誤 |
+
+#### 修復清單
+- ✅ 更新 `alembic/versions/0001_initial_schema.py` - 完整 31 欄位（CVSS v2/v3/v4、EPSS、VPR、Risk Factor 等）
+- ✅ 修改 `main.py` - 新增 `TESTING` 環境變數檢查，測試模式使用 `Base.metadata.create_all()`
+- ✅ 改進 `services/nessus_parser.py` - EPSS 精度 4 位、日期多格式支援、NaN 轉換
+- ✅ 所有測試通過：**91/91 (100%)**
+
+#### 測試結果
+| 測試套件 | 結果 |
+|---------|------|
+| test_auth.py | ✅ 14/14 |
+| test_dashboard.py | ✅ 4/4 |
+| test_ipgroups.py | ✅ 10/10 |
+| test_nessus_fields.py | ✅ 15/15 (修復前 4 失敗) |
+| test_nist.py | ✅ 14/14 |
+| test_scans.py | ✅ 16/16 |
+| test_services.py | ✅ 18/18 |
+| **合計** | **✅ 91/91 (100%)** |
+
+### 本次審查結論
+
+| 項目 | 結果 |
+|------|------|
+| 前後端架構 | ✅ 完整、所有模組齊全 |
+| 自動化測試 | ✅ 91 個測試，100% 通過率 |
+| Nessus 31 欄位 | ✅ 完整實作（model + migration + parser + schema） |
+| 資安加固 | ✅ Rate Limit、Security Headers、Audit Log、JWT RBAC |
+| 上傳功能 | ✅ HTTP 500 問題已修復，CSV/JSON 上傳正常 |
+| 資料庫連接 | ✅ SQLite/PostgreSQL 支援，migration 無誤 |
+
+---
+
 ## 系統審查紀錄（2026-05-03）
 
 ### 本次審查結論
