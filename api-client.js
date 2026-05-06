@@ -232,5 +232,29 @@ const APIClient = (() => {
     deleteNISTScan(id) {
       return req('/api/nist/scans/' + id, { method: 'DELETE' });
     },
+
+    // ─── Reports ─────────────────────────────────────────────────────────────
+
+    generateReport(config) {
+      return req('/api/reports/generate', {
+        method: 'POST',
+        body: JSON.stringify({
+          modules: config.modules,
+          timeRange: config.timeRange,
+          customStart: config.customStart,
+          customEnd: config.customEnd,
+          exportFormat: config.exportFormat,
+          includeCharts: config.includeCharts,
+          includeMetrics: config.includeMetrics,
+          includeDetails: config.includeDetails,
+          title: config.title,
+          description: config.description,
+        }),
+      });
+    },
+
+    getReportModules() {
+      return req('/api/reports/modules');
+    },
   };
 })();

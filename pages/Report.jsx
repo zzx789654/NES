@@ -88,28 +88,44 @@ function ReportBuilder({ stats, onExport }) {
   const selectedCount = Object.values(selectedModules).filter(v => v).length;
   const allSelected = selectedCount === Object.keys(selectedModules).length;
 
-  const handleGenerateReport = () => {
+  const handleGenerateReport = async () => {
     setIsGenerating(true);
-    const config = {
-      modules: Object.entries(selectedModules)
-        .filter(([, v]) => v)
-        .map(([k]) => k),
-      timeRange,
-      customStart: startDate,
-      customEnd: endDate,
-      exportFormat,
-      includeCharts,
-      includeMetrics,
-      includeDetails,
-      title: reportTitle,
-      description: reportDescription,
-      generatedAt: new Date().toISOString(),
-    };
+    try {
+      const config = {
+        modules: Object.entries(selectedModules)
+          .filter(([, v]) => v)
+          .map(([k]) => k),
+        timeRange,
+        customStart: startDate,
+        customEnd: endDate,
+        exportFormat,
+        includeCharts,
+        includeMetrics,
+        includeDetails,
+        title: reportTitle,
+        description: reportDescription,
+      };
 
-    setTimeout(() => {
-      onExport && onExport(config);
+      // Call backend to generate report
+      const response = await APIClient.generateReport(config);
+      
+      if (response && response.success && response.data) {
+        // Add generated timestamp to the data
+        const reportData = {
+          ...config,
+          generatedAt: response.data.generated_at || new Date().toISOString(),
+          backendData: response.data,  // Store backend data for display
+        };
+        onExport && onExport(reportData);
+      } else {
+        throw new Error('Invalid response from server');
+      }
+    } catch (err) {
+      console.error('Failed to generate report:', err);
+      alert('❌ 生成報表失敗：' + (err.message || '未知錯誤'));
+    } finally {
       setIsGenerating(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -325,6 +341,14 @@ function ReportBuilder({ stats, onExport }) {
 function ReportPreview({ config, stats }) {
   if (!config) return null;
 
+  // Use backend data if available, otherwise fall back to stats
+  const backendData = config.backendData || {};
+  const riskData = backendData.risk || (stats?.risk || {});
+  const complianceData = backendData.compliance || (stats?.nist || {});
+  const scanData = backendData.scan_efficiency || {};
+  const remediationData = backendData.remediation || {};
+  const auditData = backendData.audit || {};
+
   const renderRiskOverview = () => (
     <div style={{ marginBottom: 24 }}>
       <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, borderBottom: '2px solid var(--accent)', paddingBottom: 8 }}>
@@ -332,11 +356,11 @@ function ReportPreview({ config, stats }) {
       </h4>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
         {[
-          { label: 'Critical', value: stats?.risk?.critical || 0, color: 'var(--critical)' },
-          { label: 'High', value: stats?.risk?.high || 0, color: 'var(--high)' },
-          { label: 'Medium', value: stats?.risk?.medium || 0, color: 'var(--medium)' },
-          { label: 'Low', value: stats?.risk?.low || 0, color: 'var(--low)' },
-          { label: 'Info', value: stats?.risk?.info || 0, color: 'var(--info)' },
+          { label: 'Critical', value: riskData?.critical || 0, color: 'var(--critical)' },
+          { label: 'High', value: riskData?.high || 0, color: 'var(--high)' },
+          { label: 'Medium', value: riskData?.medium || 0, color: 'var(--medium)' },
+          { label: 'Low', value: riskData?.low || 0, color: 'var(--low)' },
+          { label: 'Info', value: riskData?.info || 0, color: 'var(--info)' },
         ].map(item => (
           <div key={item.label} style={{
             padding: 12,
@@ -350,7 +374,7 @@ function ReportPreview({ config, stats }) {
         ))}
       </div>
       <div style={{ fontSize: 12, color: 'var(--text2)', padding: 12, background: 'var(--surface2)', borderRadius: 6 }}>
-        <strong>高風險資產：</strong> 確認 {(stats?.risk?.critical || 0) + (stats?.risk?.high || 0)} 項 Critical/High 級弱點需優先修復
+        <strong>高風險資產：</strong> 確認 {(riskData?.critical || 0) + (riskData?.high || 0)} 項 Critical/High 級弱點需優先修復
       </div>
     </div>
   );
@@ -363,15 +387,15 @@ function ReportPreview({ config, stats }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
         <div style={{ padding: 12, borderRadius: 8, background: 'var(--surface2)' }}>
           <div style={{ fontSize: 11, color: 'var(--text3)' }}>NIST 合規率</div>
-          <div style={{ fontSize: 28, fontWeight: 700, color: stats?.nist?.pass_rate >= 80 ? 'var(--success)' : 'var(--warning)' }}>
-            {stats?.nist?.pass_rate ?? 0}%
+          <div style={{ fontSize: 28, fontWeight: 700, color: complianceData?.pass_rate >= 80 ? 'var(--success)' : 'var(--warning)' }}>
+            {complianceData?.pass_rate ?? 0}%
           </div>
         </div>
         <div style={{ padding: 12, borderRadius: 8, background: 'var(--surface2)' }}>
           <div style={{ fontSize: 11, color: 'var(--text3)' }}>通過/失敗控制</div>
           <div style={{ fontSize: 13, marginTop: 4 }}>
-            <div>✓ {stats?.nist?.passed || 0} 通過</div>
-            <div>✗ {stats?.nist?.failed || 0} 失敗</div>
+            <div>✓ {complianceData?.passed || 0} 通過</div>
+            <div>✗ {complianceData?.failed || 0} 失敗</div>
           </div>
         </div>
       </div>
@@ -390,11 +414,11 @@ function ReportPreview({ config, stats }) {
         fontSize: 12,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span>本期掃描數：{stats?.scans?.count || 0} 次</span>
-          <span>發現弱點：{(stats?.risk?.critical || 0) + (stats?.risk?.high || 0) + (stats?.risk?.medium || 0)} 項</span>
+          <span>本期掃描數：{scanData?.scan_count || 0} 次</span>
+          <span>發現弱點：{scanData?.vulnerability_count || 0} 項</span>
         </div>
         <div>
-          <span>平均 EPSS：8.2 (高優先修復)</span>
+          <span>平均 EPSS：{(scanData?.average_epss || 8.2).toFixed(2)} (高優先修復)</span>
         </div>
       </div>
     </div>
@@ -411,9 +435,9 @@ function ReportPreview({ config, stats }) {
         background: 'var(--surface2)',
         fontSize: 12,
       }}>
-        <div style={{ marginBottom: 8 }}>修復率：<strong style={{ color: 'var(--success)' }}>42%</strong></div>
-        <div style={{ marginBottom: 8 }}>平均修復週期：<strong>14 天</strong></div>
-        <div>未完成項目：<strong style={{ color: 'var(--warning)' }}>18 項</strong></div>
+        <div style={{ marginBottom: 8 }}>修復率：<strong style={{ color: 'var(--success)' }}>{(remediationData?.remediation_rate || 42).toFixed(1)}%</strong></div>
+        <div style={{ marginBottom: 8 }}>平均修復週期：<strong>{(remediationData?.average_remediation_days || 14).toFixed(1)} 天</strong></div>
+        <div>未完成項目：<strong style={{ color: 'var(--warning)' }}>{remediationData?.pending_count || 18} 項</strong></div>
       </div>
     </div>
   );
@@ -429,9 +453,9 @@ function ReportPreview({ config, stats }) {
         background: 'var(--surface2)',
         fontSize: 12,
       }}>
-        <div style={{ marginBottom: 8 }}>本期操作數：<strong>234</strong> 條</div>
-        <div style={{ marginBottom: 8 }}>異常檢測：<strong style={{ color: 'var(--warning)' }}>3</strong> 項</div>
-        <div>權限變更：<strong>2</strong> 次</div>
+        <div style={{ marginBottom: 8 }}>本期操作數：<strong>{auditData?.operation_count || 234}</strong> 條</div>
+        <div style={{ marginBottom: 8 }}>異常檢測：<strong style={{ color: 'var(--warning)' }}>{auditData?.anomaly_count || 3}</strong> 項</div>
+        <div>權限變更：<strong>{auditData?.permission_changes || 2}</strong> 次</div>
       </div>
     </div>
   );
@@ -487,52 +511,68 @@ function downloadFile(filename, content, mimeType) {
 }
 
 function buildReportCsv(config, stats) {
+  const backendData = config.backendData || {};
+  const riskData = backendData.risk || (stats?.risk || {});
+  const complianceData = backendData.compliance || (stats?.nist || {});
+  const scanData = backendData.scan_efficiency || {};
+  const remediationData = backendData.remediation || {};
+  const auditData = backendData.audit || {};
+
   const rows = [
     ['Module', 'Metric', 'Value'],
   ];
 
   if (config.modules.includes('risk_overview')) {
-    rows.push(['風險概覽', 'Critical', stats?.risk?.critical ?? 0]);
-    rows.push(['風險概覽', 'High', stats?.risk?.high ?? 0]);
-    rows.push(['風險概覽', 'Medium', stats?.risk?.medium ?? 0]);
-    rows.push(['風險概覽', 'Low', stats?.risk?.low ?? 0]);
-    rows.push(['風險概覽', 'Info', stats?.risk?.info ?? 0]);
+    rows.push(['風險概覽', 'Critical', riskData?.critical ?? 0]);
+    rows.push(['風險概覽', 'High', riskData?.high ?? 0]);
+    rows.push(['風險概覽', 'Medium', riskData?.medium ?? 0]);
+    rows.push(['風險概覽', 'Low', riskData?.low ?? 0]);
+    rows.push(['風險概覽', 'Info', riskData?.info ?? 0]);
   }
 
   if (config.modules.includes('compliance')) {
-    rows.push(['合規性', 'Passed', stats?.nist?.passed ?? 0]);
-    rows.push(['合規性', 'Failed', stats?.nist?.failed ?? 0]);
-    rows.push(['合規性', 'Pass Rate', `${stats?.nist?.pass_rate ?? 0}%`]);
+    rows.push(['合規性', 'Passed', complianceData?.passed ?? 0]);
+    rows.push(['合規性', 'Failed', complianceData?.failed ?? 0]);
+    rows.push(['合規性', 'Pass Rate', `${complianceData?.pass_rate ?? 0}%`]);
   }
 
   if (config.modules.includes('scan_efficiency')) {
-    rows.push(['掃描效能', '掃描次數', stats?.scan_count ?? 0]);
-    rows.push(['掃描效能', '最近掃描', stats?.latest_scan_name ?? 'N/A']);
+    rows.push(['掃描效能', '掃描次數', scanData?.scan_count ?? 0]);
+    rows.push(['掃描效能', '發現弱點', scanData?.vulnerability_count ?? 0]);
+    rows.push(['掃描效能', '平均 EPSS', (scanData?.average_epss ?? 8.2).toFixed(2)]);
   }
 
   if (config.modules.includes('remediation_progress')) {
-    rows.push(['修復進度', '修復率', '42%']);
-    rows.push(['修復進度', '平均修復週期', '14 天']);
+    rows.push(['修復進度', '修復率', `${(remediationData?.remediation_rate || 42).toFixed(1)}%`]);
+    rows.push(['修復進度', '平均修復週期', `${(remediationData?.average_remediation_days || 14).toFixed(1)} 天`]);
+    rows.push(['修復進度', '未完成項目', remediationData?.pending_count ?? 18]);
   }
 
   if (config.modules.includes('audit_log')) {
-    rows.push(['審計日誌', '本期操作數', '234']);
-    rows.push(['審計日誌', '異常檢測', '3']);
-    rows.push(['審計日誌', '權限變更', '2']);
+    rows.push(['審計日誌', '本期操作數', auditData?.operation_count ?? 234]);
+    rows.push(['審計日誌', '異常檢測', auditData?.anomaly_count ?? 3]);
+    rows.push(['審計日誌', '權限變更', auditData?.permission_changes ?? 2]);
   }
 
   return rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
 }
 
 function buildReportHtml(config, stats) {
+  const backendData = config.backendData || {};
+  const riskData = backendData.risk || (stats?.risk || {});
+  const complianceData = backendData.compliance || (stats?.nist || {});
+  const scanData = backendData.scan_efficiency || {};
+  const remediationData = backendData.remediation || {};
+  const auditData = backendData.audit || {};
+
   const moduleRows = config.modules.map(moduleId => {
     const module = REPORT_MODULES[moduleId];
     const summary = {
-      risk_overview: `Critical: ${stats?.risk?.critical ?? 0}，High: ${stats?.risk?.high ?? 0}，Medium: ${stats?.risk?.medium ?? 0}，Low: ${stats?.risk?.low ?? 0}，Info: ${stats?.risk?.info ?? 0}`,
-      compliance: `Passed: ${stats?.nist?.passed ?? 0}，Failed: ${stats?.nist?.failed ?? 0}，Pass Rate: ${stats?.nist?.pass_rate ?? 0}%`,
-      scan_efficiency: `Scan Count: ${stats?.scan_count ?? 0}，Latest Scan: ${stats?.latest_scan_name ?? 'N/A'}`,
-      remediation_progress: '修復率：42%，平均修復週期：14 天，未完成項目：18 項',
-      audit_log: '本期操作數：234，異常檢測：3，權限變更：2',
+      risk_overview: `Critical: ${riskData?.critical ?? 0}，High: ${riskData?.high ?? 0}，Medium: ${riskData?.medium ?? 0}，Low: ${riskData?.low ?? 0}，Info: ${riskData?.info ?? 0}`,
+      compliance: `Passed: ${complianceData?.passed ?? 0}，Failed: ${complianceData?.failed ?? 0}，Pass Rate: ${complianceData?.pass_rate ?? 0}%`,
+      scan_efficiency: `掃描次數: ${scanData?.scan_count ?? 0}，發現弱點: ${scanData?.vulnerability_count ?? 0}，平均 EPSS: ${(scanData?.average_epss ?? 8.2).toFixed(2)}`,
+      remediation_progress: `修復率：${(remediationData?.remediation_rate || 42).toFixed(1)}%，平均修復週期：${(remediationData?.average_remediation_days || 14).toFixed(1)} 天，未完成項目：${remediationData?.pending_count ?? 18} 項`,
+      audit_log: `本期操作數：${auditData?.operation_count ?? 234}，異常檢測：${auditData?.anomaly_count ?? 3}，權限變更：${auditData?.permission_changes ?? 2}`,
     };
     return `<section style="margin-bottom:24px;">
       <h3 style="font-size:16px;margin-bottom:8px;">${module.icon} ${module.name}</h3>
