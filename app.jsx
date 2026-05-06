@@ -13,6 +13,7 @@ const NAV = [
   { id:'dashboard',  label:'Dashboard',        icon:'⬡', sub:'概覽' },
   { id:'vulnscan',   label:'Vulnerability Scan', icon:'⬡', sub:'弱點掃描' },
   { id:'nist',       label:'NIST',              icon:'⬡', sub:'安全框架' },
+  { id:'report',     label:'Report Generator',  icon:'⬡', sub:'模組化報表' },
   { id:'users',      label:'帳號管理',           icon:'⬡', sub:'User Management' },
 ];
 
@@ -189,6 +190,7 @@ function App() {
     dashboard: window.DashboardPage,
     vulnscan:  window.VulnScanPage,
     nist:      window.NISTPage,
+    report:    window.ReportPage,
     users:     window.UserManagementPage,
   };
 
