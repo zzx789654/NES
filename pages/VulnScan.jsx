@@ -335,6 +335,10 @@ function VulnScanPage({ onStatsChange, currentUser }) {
   const [scans, setScans] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [scanHosts, setScanHosts] = useState([]);
+  const [vulnPage, setVulnPage] = useState({ items: [], total: 0, page: 1, page_size: 200 });
+  const [sortBy, setSortBy] = useState('host');
+  const [sortDir, setSortDir] = useState('asc');
   const [diffData, setDiffData] = useState(null);
   const [diffBase, setDiffBase] = useState(null);
   const [diffComp, setDiffComp] = useState(null);
@@ -354,6 +358,9 @@ function VulnScanPage({ onStatsChange, currentUser }) {
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(null);
+  const [matrixVulns, setMatrixVulns] = useState([]);
+  const [matrixLoading, setMatrixLoading] = useState(false);
+  const [matrixError, setMatrixError] = useState('');
 
   // Debounce search input — avoid re-filtering on every keystroke
   useEffect(() => {
@@ -375,7 +382,9 @@ function VulnScanPage({ onStatsChange, currentUser }) {
             setSelectedId(latestId);
           }
           if (!detail || detail.id !== latestId) {
-            loadScanDetail(latestId);
+            loadScanMeta(latestId);
+            loadScanHosts(latestId);
+            loadVulnerabilities(latestId, 1, vulnPage.page_size, { search, sortBy, sortDir, hosts: selectedIPs.length > 0 ? selectedIPs.join(',') : undefined });
           }
         } else {
           setSelectedId(null);
@@ -393,14 +402,62 @@ function VulnScanPage({ onStatsChange, currentUser }) {
       });
   };
 
-  const loadScanDetail = id => {
+  const loadScanMeta = id => {
     if (!id) return;
-    APIClient.getScanDetail(id)
+    APIClient.getScanMeta(id)
       .then(data => {
         setDetail(data);
         setError('');
       })
       .catch(err => setError(err.message || '無法載入掃描明細'));
+  };
+
+  const loadScanHosts = id => {
+    if (!id) {
+      setScanHosts([]);
+      return;
+    }
+    APIClient.getScanHosts(id)
+      .then(hosts => setScanHosts(hosts || []))
+      .catch(() => setScanHosts([]));
+  };
+
+  const loadVulnerabilities = (id, page = 1, pageSize = 200, filters = {}) => {
+    if (!id) return;
+    APIClient.getScanVulns(id, {
+      page,
+      page_size: pageSize,
+      search: filters.search || search,
+      risk: filters.risk || (sevFilter !== 'all' ? sevFilter : undefined),
+      hosts: filters.hosts || (selectedIPs.length > 0 ? selectedIPs.join(',') : undefined),
+      sort_by: filters.sortBy || sortBy,
+      sort_dir: filters.sortDir || sortDir,
+    })
+      .then(pageData => {
+        setVulnPage(pageData);
+        setError('');
+      })
+      .catch(err => setError(err.message || '無法載入漏洞資料'));
+  };
+
+  const loadMatrixVulnerabilities = (id, hosts) => {
+    if (!id) {
+      setMatrixVulns([]);
+      return;
+    }
+    setMatrixLoading(true);
+    setMatrixError('');
+    APIClient.getScanVulnMatrix(id, {
+      hosts: hosts || undefined,
+    })
+      .then(data => {
+        setMatrixVulns(data || []);
+      })
+      .catch(err => {
+        setMatrixVulns([]);
+        setMatrixError(err.message || '無法載入矩陣資料');
+      })
+      .finally(() => setMatrixLoading(false));
   };
 
   const loadDiff = (baseId, compId) => {
@@ -440,11 +497,19 @@ function VulnScanPage({ onStatsChange, currentUser }) {
 
   useEffect(() => {
     if (selectedId) {
-      loadScanDetail(selectedId);
+      setVulnPage(prev => ({ ...prev, page: 1 }));
+      loadScanMeta(selectedId);
+      loadScanHosts(selectedId);
+      loadVulnerabilities(selectedId, 1, vulnPage.page_size, { search, sortBy, sortDir, hosts: selectedIPs.length > 0 ? selectedIPs.join(',') : undefined });
       setExpandedRow(null);
       setExpandedVulnDetail(null);
     } else {
       setDetail(null);
+      setScanHosts([]);
+      setVulnPage({ items: [], total: 0, page: 1, page_size: 200 });
+      setMatrixVulns([]);
+      setMatrixError('');
+      setMatrixLoading(false);
     }
   }, [selectedId]);
 
@@ -456,6 +521,34 @@ function VulnScanPage({ onStatsChange, currentUser }) {
       setHistoryHost(allHosts[0]);
     }
   }, [allHosts, historyHost]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    setVulnPage(prev => ({ ...prev, page: 1 }));
+    loadVulnerabilities(selectedId, 1, vulnPage.page_size, {
+      search,
+      risk: sevFilter !== 'all' ? sevFilter : undefined,
+      hosts: selectedIPs.length > 0 ? selectedIPs.join(',') : undefined,
+      sortBy,
+      sortDir,
+    });
+  }, [selectedId, search, sevFilter, selectedIPs, sortBy, sortDir]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    loadVulnerabilities(selectedId, vulnPage.page, vulnPage.page_size, {
+      search,
+      risk: sevFilter !== 'all' ? sevFilter : undefined,
+      hosts: selectedIPs.length > 0 ? selectedIPs.join(',') : undefined,
+      sortBy,
+      sortDir,
+    });
+  }, [selectedId, vulnPage.page, vulnPage.page_size]);
+
+  useEffect(() => {
+    if (!selectedId || tab !== 'matrix') return;
+    loadMatrixVulnerabilities(selectedId, selectedIPs.length > 0 ? selectedIPs.join(',') : undefined);
+  }, [selectedId, tab, selectedIPs]);
 
   useEffect(() => {
     loadHostHistory(historyHost);
@@ -496,30 +589,11 @@ function VulnScanPage({ onStatsChange, currentUser }) {
   };
 
   const selectedScan = scans.find(scan => scan.id === selectedId);
-  const vulnRows = detail?.vulnerabilities || [];
-  const allHosts = useMemo(() => [...new Set(vulnRows.map(v => v.host).filter(Boolean))].sort(compareIP), [vulnRows]);
+  const vulnRows = vulnPage.items || [];
+  const allHosts = scanHosts;
 
-  const activeVulns = useMemo(() => {
-    if (selectedIPs.length === 0) return vulnRows;
-    return vulnRows.filter(v => selectedIPs.includes(v.host));
-  }, [vulnRows, selectedIPs]);
-
-  const filteredVulns = useMemo(() => {
-    return activeVulns
-      .filter(v => sevFilter === 'all' || v.risk === sevFilter)
-      .filter(v => {
-        if (!search) return true;
-        const term = search.toLowerCase();
-        return [v.host, v.name, v.plugin_id, v.cve]
-          .filter(Boolean)
-          .some(field => String(field).toLowerCase().includes(term));
-      })
-      .sort((a, b) => {
-        const ipCmp = compareIP(a.host, b.host);
-        if (ipCmp !== 0) return ipCmp;
-        return (SEV_ORDER[a.risk] ?? 99) - (SEV_ORDER[b.risk] ?? 99);
-      });
-  }, [activeVulns, search, sevFilter]);
+  const filteredVulns = vulnRows;
+  const matrixSource = tab === 'matrix' ? matrixVulns : vulnRows;
 
   const diffRows = useMemo(() => {
     if (!diffData) return [];
@@ -583,8 +657,8 @@ function VulnScanPage({ onStatsChange, currentUser }) {
       : undefined,
   }));
 
-  const epssVulns = useMemo(() => activeVulns.filter(v => v.epss != null && v.cvss_v3_base != null && parseFloat(v.cvss_v3_base) > 0), [activeVulns]);
-  const vprVulns = useMemo(() => activeVulns.filter(v => v.vpr != null && v.cvss_v3_base != null && parseFloat(v.cvss_v3_base) > 0), [activeVulns]);
+  const epssVulns = useMemo(() => matrixSource.filter(v => v.epss != null && v.cvss_v3_base != null && parseFloat(v.cvss_v3_base) > 0), [matrixSource]);
+  const vprVulns = useMemo(() => matrixSource.filter(v => v.vpr != null && v.cvss_v3_base != null && parseFloat(v.cvss_v3_base) > 0), [matrixSource]);
 
   if (loading) {
     return <div style={{ padding: 40, color: 'var(--text2)' }}>載入中…</div>;
@@ -640,7 +714,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
               </select>
               <SearchBar value={searchInput} onChange={setSearchInput} placeholder="搜尋 IP / 弱點名稱 / CVE…" />
               <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text2)', fontFamily: 'var(--font-mono)' }}>
-                {filteredVulns.length} 筆{selectedIPs.length > 0 ? ` · ${selectedIPs.length} IP 篩選中` : ''}
+                第 {vulnPage.page} / {Math.max(1, Math.ceil(vulnPage.total / vulnPage.page_size))} 頁 · 共 {vulnPage.total} 筆{selectedIPs.length > 0 ? ` · ${selectedIPs.length} IP 篩選中` : ''}
               </span>
             </div>
 
@@ -658,7 +732,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {['Critical', 'High', 'Medium', 'Low', 'Info'].map(sev => {
-                const cnt = activeVulns.filter(v => v.risk === sev).length;
+                const cnt = vulnRows.filter(v => v.risk === sev).length;
                 const colors = { Critical: 'var(--critical)', High: 'var(--high)', Medium: 'var(--medium)', Low: 'var(--low)', Info: 'var(--info)' };
                 const bgs = { Critical: 'var(--critical-bg)', High: 'var(--high-bg)', Medium: 'var(--medium-bg)', Low: 'var(--low-bg)', Info: 'var(--info-bg)' };
                 return (
@@ -672,7 +746,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
             </div>
 
             <Card noPad>
-              <DataTable columns={columns} rows={filteredVulns} maxHeight={520} onRowClick={row => {
+              <DataTable columns={columns} rows={filteredVulns} maxHeight={520} serverSide onSort={(col, dir) => { setSortBy(col); setSortDir(dir); setVulnPage(prev => ({ ...prev, page: 1 })); }} sortBy={sortBy} sortDir={sortDir} onRowClick={row => {
                 if (expandedRow?.id === row.id) {
                   setExpandedRow(null);
                   setExpandedVulnDetail(null);
@@ -687,6 +761,23 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                   .finally(() => setExpandedLoading(false));
               }} />
             </Card>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 12, color: 'var(--text2)' }}>
+                目前頁數 {vulnPage.page} / {Math.max(1, Math.ceil(vulnPage.total / vulnPage.page_size))}，每頁 {vulnPage.page_size} 筆
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button onClick={() => setVulnPage(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))} disabled={vulnPage.page <= 1}
+                  style={{ padding: '6px 10px', borderRadius: 'var(--rsm)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', cursor: vulnPage.page <= 1 ? 'not-allowed' : 'pointer' }}>上一頁</button>
+                <button onClick={() => setVulnPage(prev => ({ ...prev, page: Math.min(Math.max(1, Math.ceil(vulnPage.total / vulnPage.page_size)), prev.page + 1) }))} disabled={vulnPage.page >= Math.max(1, Math.ceil(vulnPage.total / vulnPage.page_size))}
+                  style={{ padding: '6px 10px', borderRadius: 'var(--rsm)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', cursor: vulnPage.page >= Math.max(1, Math.ceil(vulnPage.total / vulnPage.page_size)) ? 'not-allowed' : 'pointer' }}>下一頁</button>
+                <span style={{ fontSize: 12, color: 'var(--text3)' }}>每頁顯示</span>
+                <select value={vulnPage.page_size} onChange={e => setVulnPage(prev => ({ ...prev, page_size: Number(e.target.value), page: 1 }))}
+                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--rsm)', padding: '6px 10px', fontSize: 12, color: 'var(--text)' }}>
+                  {[100, 200, 500, 1000].map(size => <option key={size} value={size}>{size}</option>)}
+                </select>
+              </div>
+            </div>
 
             {expandedRow && (
               <Card title={`弱點詳情 — ${expandedRow.name}`} action={<Btn size="sm" variant="ghost" onClick={() => { setExpandedRow(null); setExpandedVulnDetail(null); }}>關閉 ×</Btn>}>
@@ -844,38 +935,44 @@ function VulnScanPage({ onStatsChange, currentUser }) {
               {selectedIPs.length > 0 && <span style={{ color: 'var(--accent)', fontWeight: 600 }}>已篩選 IP：{selectedIPs.join(', ')}</span>}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <QuadrantChart
-                vulns={epssVulns}
-                xKey="cvss_v3_base"
-                yKey="epss"
-                xLabel="CVSS"
-                yLabel="EPSS"
-                xMid={7}
-                yMid={0.1}
-                xMax={10}
-                yMax={1}
-                title={`EPSS vs CVSS 風險矩陣 (${epssVulns.length} 筆)`}
-                quadrantLabels={['🔴 優先修補', '🟠 計劃修補', '🟡 監控利用', '🟢 低優先']}
-              />
-              <QuadrantChart
-                vulns={vprVulns}
-                xKey="cvss_v3_base"
-                yKey="vpr"
-                xLabel="CVSS"
-                yLabel="VPR"
-                xMid={7}
-                yMid={7}
-                xMax={10}
-                yMax={10}
-                title={`VPR vs CVSS 風險矩陣 (${vprVulns.length} 筆)`}
-                quadrantLabels={['🔴 優先修補', '🟠 計劃修補', '🟡 監控利用', '🟢 低優先']}
-              />
-            </div>
+            {matrixLoading ? (
+              <div style={{ padding: 32, textAlign: 'center', color: 'var(--text2)' }}>載入矩陣資料…</div>
+            ) : matrixError ? (
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--critical)' }}>{matrixError}</div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <QuadrantChart
+                  vulns={epssVulns}
+                  xKey="cvss_v3_base"
+                  yKey="epss"
+                  xLabel="CVSS"
+                  yLabel="EPSS"
+                  xMid={7}
+                  yMid={0.1}
+                  xMax={10}
+                  yMax={1}
+                  title={`EPSS vs CVSS 風險矩陣 (${epssVulns.length} 筆)`}
+                  quadrantLabels={['🔴 優先修補', '🟠 計劃修補', '🟡 監控利用', '🟢 低優先']}
+                />
+                <QuadrantChart
+                  vulns={vprVulns}
+                  xKey="cvss_v3_base"
+                  yKey="vpr"
+                  xLabel="CVSS"
+                  yLabel="VPR"
+                  xMid={7}
+                  yMid={7}
+                  xMax={10}
+                  yMax={10}
+                  title={`VPR vs CVSS 風險矩陣 (${vprVulns.length} 筆)`}
+                  quadrantLabels={['🔴 優先修補', '🟠 計劃修補', '🟡 監控利用', '🟢 低優先']}
+                />
+              </div>
+            )}
 
             <Card title="優先修補清單 — CVSS ≥ 7 且 EPSS ≥ 0.1">
               <DataTable compact maxHeight={280}
-                rows={activeVulns.filter(v => parseFloat(v.cvss_v3_base || 0) >= 7 && parseFloat(v.epss || 0) >= 0.1).sort((a, b) => parseFloat(b.epss || 0) - parseFloat(a.epss || 0))}
+                rows={matrixSource.filter(v => parseFloat(v.cvss_v3_base || 0) >= 7 && parseFloat(v.epss || 0) >= 0.1).sort((a, b) => parseFloat(b.epss || 0) - parseFloat(a.epss || 0))}
                 columns={[
                   { key: 'risk', label: '等級', sortable: true, render: v => <SeverityBadge level={v || 'Info'} /> },
                   { key: 'epss', label: 'EPSS', sortable: true, mono: true, render: v => <span style={{ color: 'var(--critical)', fontWeight: 700 }}>{parseFloat(v).toFixed(3)}</span> },

@@ -5,14 +5,14 @@ import math
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from sqlalchemy import insert, nulls_last
+from sqlalchemy import insert, nulls_last, or_, desc
 from sqlalchemy.orm import Session, load_only, selectinload
 
 from database import get_db
 from limiter import limiter
 from models.scan import Scan, Vulnerability
 from routers.auth import get_current_user, require_role
-from schemas.scan import ScanOut, ScanDetail, ScanDetailSlim, ScanDiff, HostHistory, VulnerabilityOut
+from schemas.scan import ScanOut, ScanDetail, ScanDetailSlim, ScanDiff, HostHistory, VulnerabilityOut, VulnerabilityPage, VulnSlim
 from services.nessus_parser import parse_nessus_csv
 from services.cve_parser import parse_nvd_json
 from services.diff_service import diff_scans
@@ -31,6 +31,27 @@ def _finite_or_none(value):
     if isinstance(value, float):
         return value if math.isfinite(value) else None
     return value
+
+
+def _query_scan_vulns(scan_id: int, db: Session, search: str | None = None, risk: str | None = None, hosts: str | None = None):
+    q = db.query(Vulnerability).filter(Vulnerability.scan_id == scan_id)
+    if risk:
+        q = q.filter(Vulnerability.risk == risk)
+    if hosts:
+        host_values = [h.strip() for h in hosts.split(',') if h.strip()]
+        if host_values:
+            q = q.filter(Vulnerability.host.in_(host_values))
+    if search:
+        term = f"%{search.strip().lower()}%"
+        q = q.filter(
+            or_(
+                Vulnerability.host.ilike(term),
+                Vulnerability.name.ilike(term),
+                Vulnerability.plugin_id.ilike(term),
+                Vulnerability.cve.ilike(term),
+            )
+        )
+    return q
 
 
 @router.get("", response_model=list[ScanOut])
@@ -104,6 +125,99 @@ def get_scan(scan_id: int, db: Session = Depends(get_db), _=Depends(get_current_
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
     return scan
+
+
+@router.get("/{scan_id}/meta", response_model=ScanOut)
+def get_scan_meta(scan_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return scan
+
+
+@router.get("/{scan_id}/hosts", response_model=list[str])
+def get_scan_hosts(scan_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    hosts = (
+        db.query(Vulnerability.host)
+        .filter(Vulnerability.scan_id == scan_id, Vulnerability.host.isnot(None))
+        .distinct()
+        .order_by(Vulnerability.host)
+        .all()
+    )
+    return [host for host, in hosts]
+
+
+@router.get("/{scan_id}/vulns", response_model=VulnerabilityPage)
+def list_scan_vulns(
+    scan_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(200, ge=1, le=1000),
+    search: str | None = Query(None, description="Search host/name/plugin_id/CVE."),
+    risk: str | None = Query(None, description="Filter by severity."),
+    hosts: str | None = Query(None, description="Comma-separated host filter."),
+    sort_by: str | None = Query(None, description="Sort field."),
+    sort_dir: str = Query('asc', pattern='^(asc|desc)$'),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    q = db.query(Vulnerability).filter(Vulnerability.scan_id == scan_id)
+    if risk:
+        q = q.filter(Vulnerability.risk == risk)
+    if hosts:
+        host_values = [h.strip() for h in hosts.split(',') if h.strip()]
+        if host_values:
+            q = q.filter(Vulnerability.host.in_(host_values))
+    q = _query_scan_vulns(scan_id, db, search=search, risk=risk, hosts=hosts)
+
+    total = q.count()
+
+    sort_map = {
+        'host': Vulnerability.host,
+        'risk': Vulnerability.risk,
+        'plugin_id': Vulnerability.plugin_id,
+        'cve': Vulnerability.cve,
+        'name': Vulnerability.name,
+        'port': Vulnerability.port,
+        'cvss_v3_base': Vulnerability.cvss_v3_base,
+        'epss': Vulnerability.epss,
+        'vpr': Vulnerability.vpr,
+    }
+    order_col = sort_map.get(sort_by, Vulnerability.host)
+    order = desc(order_col) if sort_dir == 'desc' else order_col
+
+    items = q.order_by(order).offset((page - 1) * page_size).limit(page_size).all()
+    return VulnerabilityPage(
+        scan_id=scan_id,
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=items,
+    )
+
+
+@router.get("/{scan_id}/vuln-matrix", response_model=list[VulnSlim])
+def list_scan_vuln_matrix(
+    scan_id: int,
+    search: str | None = Query(None, description="Search host/name/plugin_id/CVE."),
+    risk: str | None = Query(None, description="Filter by severity."),
+    hosts: str | None = Query(None, description="Comma-separated host filter."),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    q = _query_scan_vulns(scan_id, db, search=search, risk=risk, hosts=hosts)
+    return q.order_by(Vulnerability.host).all()
 
 
 @router.get("/{scan_id}/vulns/{vuln_id}", response_model=VulnerabilityOut)

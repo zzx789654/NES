@@ -102,11 +102,7 @@ def parse_nessus_csv(content: bytes, scan_name: str, scan_date: date | None = No
 
     # ── Date columns ──────────────────────────────────────────────────────────
     for col in ("plugin_publication_date", "plugin_modification_date"):
-<<<<<<< HEAD
         parsed = pd.to_datetime(df[col], errors="coerce", format="mixed", dayfirst=False)
-=======
-        parsed = pd.to_datetime(df[col], errors="coerce", format="mixed")
->>>>>>> aed8c901a4f2e374765ac4224421300afbe50a4b
         df[col] = [d.date() if not pd.isna(d) else None for d in parsed]
 
     # ── Bool columns ──────────────────────────────────────────────────────────

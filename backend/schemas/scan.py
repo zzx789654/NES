@@ -146,6 +146,16 @@ class ScanDetailSlim(ScanOut):
     vulnerabilities: list[VulnSlim] = []
 
 
+class VulnerabilityPage(BaseModel):
+    scan_id: int
+    total: int
+    page: int
+    page_size: int
+    items: list[VulnSlim] = []
+
+    model_config = {"from_attributes": True}
+
+
 class HostHistoryEntry(BaseModel):
     scan_id: int
     scan_name: str

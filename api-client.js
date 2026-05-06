@@ -127,6 +127,34 @@ const APIClient = (() => {
       return req('/api/scans/' + id);
     },
 
+    getScanMeta(id) {
+      return req('/api/scans/' + id + '/meta');
+    },
+
+    getScanHosts(id) {
+      return req('/api/scans/' + id + '/hosts');
+    },
+
+    getScanVulns(scanId, params = {}) {
+      const qs = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          qs.append(key, value);
+        }
+      });
+      return req('/api/scans/' + scanId + '/vulns' + (qs.toString() ? '?' + qs.toString() : ''));
+    },
+
+    getScanVulnMatrix(scanId, params = {}) {
+      const qs = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          qs.append(key, value);
+        }
+      });
+      return req('/api/scans/' + scanId + '/vuln-matrix' + (qs.toString() ? '?' + qs.toString() : ''));
+    },
+
     getVulnDetail(scanId, vulnId) {
       return req('/api/scans/' + scanId + '/vulns/' + vulnId);
     },

@@ -196,22 +196,25 @@ function Card({ children, style: extra, title, action, noPad }) {
 }
 
 // ─── DataTable ────────────────────────────────────────────────────────────────
-function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeight, compact }) {
+function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeight, compact, serverSide = false, onSort, sortBy, sortDir }) {
   const ROW_H = compact ? 34 : 42;
   const OVERSCAN = 6;
 
-  const [sortCol, setSortCol] = useState(null);
-  const [sortDir, setSortDir] = useState('asc');
+  const [localSortCol, setLocalSortCol] = useState(null);
+  const [localSortDir, setLocalSortDir] = useState('asc');
   const [scrollTop, setScrollTop] = useState(0);
 
+  const activeSortCol = serverSide ? sortBy : localSortCol;
+  const activeSortDir = serverSide ? sortDir : localSortDir;
+
   const sorted = React.useMemo(() => {
-    if (!sortCol) return rows;
+    if (serverSide || !activeSortCol) return rows;
     return [...rows].sort((a, b) => {
-      const va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
+      const va = a[activeSortCol] ?? '', vb = b[activeSortCol] ?? '';
       const cmp = String(va).localeCompare(String(vb), 'zh-TW', { numeric: true });
-      return sortDir === 'asc' ? cmp : -cmp;
+      return activeSortDir === 'asc' ? cmp : -cmp;
     });
-  }, [rows, sortCol, sortDir]);
+  }, [rows, activeSortCol, activeSortDir, serverSide]);
 
   // Reset scroll position when data changes
   const prevRowsLen = useRef(rows.length);
@@ -224,8 +227,17 @@ function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeig
 
   const handleSort = col => {
     if (!col.sortable) return;
-    if (sortCol === col.key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortCol(col.key); setSortDir('asc'); }
+    if (serverSide) {
+      if (!onSort) return;
+      const nextDir = sortBy === col.key && sortDir === 'asc' ? 'desc' : 'asc';
+      onSort(col.key, nextDir);
+      return;
+    }
+    if (localSortCol === col.key) setLocalSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else {
+      setLocalSortCol(col.key);
+      setLocalSortDir('asc');
+    }
   };
 
   const cellPad = compact ? '6px 12px' : '10px 14px';
@@ -248,7 +260,7 @@ function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeig
             {columns.map(col => (
               <th key={col.key} onClick={() => handleSort(col)}
                 style={{padding:cellPad,textAlign:'left',fontWeight:600,fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text2)',background:'var(--surface2)',borderBottom:'1px solid var(--border)',cursor:col.sortable?'pointer':'default',whiteSpace:'nowrap',position:'sticky',top:0,zIndex:1}}>
-                {col.label}{col.sortable && (sortCol===col.key ? (sortDir==='asc'?' ↑':' ↓') : ' ↕')}
+                {col.label}{col.sortable && (activeSortCol===col.key ? (activeSortDir==='asc'?' ↑':' ↓') : ' ↕')}
               </th>
             ))}
           </tr>

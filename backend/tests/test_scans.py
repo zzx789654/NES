@@ -87,6 +87,54 @@ def test_get_scan_not_found(client, admin_token):
     assert resp.status_code == 404
 
 
+def test_get_scan_meta(client, admin_token):
+    scan_id = _upload(client, admin_token).json()["id"]
+    resp = client.get(f"/api/scans/{scan_id}/meta", headers=auth(admin_token))
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == scan_id
+    assert data["vuln_count"] == 3
+    assert "vulnerabilities" not in data
+
+
+def test_get_scan_hosts(client, admin_token):
+    scan_id = _upload(client, admin_token).json()["id"]
+    resp = client.get(f"/api/scans/{scan_id}/hosts", headers=auth(admin_token))
+    assert resp.status_code == 200
+    assert set(resp.json()) == {"192.168.1.1", "192.168.1.2"}
+
+
+def test_list_scan_vulns_pagination(client, admin_token):
+    scan_id = _upload(client, admin_token).json()["id"]
+    resp = client.get(f"/api/scans/{scan_id}/vulns?page=1&page_size=2", headers=auth(admin_token))
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["scan_id"] == scan_id
+    assert data["total"] == 3
+    assert data["page"] == 1
+    assert data["page_size"] == 2
+    assert len(data["items"]) == 2
+
+    resp2 = client.get(f"/api/scans/{scan_id}/vulns?page=2&page_size=2", headers=auth(admin_token))
+    assert resp2.status_code == 200
+    assert len(resp2.json()["items"]) == 1
+
+
+def test_list_scan_vuln_matrix(client, admin_token):
+    scan_id = _upload(client, admin_token).json()["id"]
+    resp = client.get(f"/api/scans/{scan_id}/vuln-matrix", headers=auth(admin_token))
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 3
+    assert all("cvss_v3_base" in item for item in data)
+    assert any(item["epss"] is not None for item in data)
+
+    resp2 = client.get(f"/api/scans/{scan_id}/vuln-matrix?hosts=192.168.1.1", headers=auth(admin_token))
+    assert resp2.status_code == 200
+    assert len(resp2.json()) == 2
+
+
 def test_delete_scan(client, admin_token):
     scan_id = _upload(client, admin_token).json()["id"]
     assert client.delete(f"/api/scans/{scan_id}", headers=auth(admin_token)).status_code == 204
