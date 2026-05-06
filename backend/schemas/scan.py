@@ -1,5 +1,23 @@
+import math
 from datetime import date, datetime
+from decimal import Decimal
+
 from pydantic import BaseModel, field_validator
+
+
+def _none_if_non_finite(value):
+    """Convert DB/parser NaN or infinity values to API nulls.
+
+    PostgreSQL NUMERIC can represent NaN, and FastAPI's JSON encoder can
+    fail with HTTP 500 if such values reach response serialization.
+    """
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return None if not value.is_finite() else value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    return value
 
 
 class VulnerabilityBase(BaseModel):
@@ -51,6 +69,21 @@ class VulnerabilityBase(BaseModel):
     core_impact: bool = False
     canvas: bool = False
 
+    @field_validator(
+        "cvss_v2_base",
+        "cvss_v2_temporal",
+        "cvss_v3_base",
+        "cvss_v3_temporal",
+        "cvss_v4_base",
+        "cvss_v4_threat_score",
+        "vpr",
+        "epss",
+        mode="before",
+    )
+    @classmethod
+    def finite_numeric_or_none(cls, value):
+        return _none_if_non_finite(value)
+
 
 class VulnerabilityOut(VulnerabilityBase):
     id: int
@@ -74,6 +107,11 @@ class VulnSlim(BaseModel):
     cvss_v3_base: float | None = None
     epss: float | None = None
     vpr: float | None = None
+
+    @field_validator("cvss_v2_base", "cvss_v3_base", "epss", "vpr", mode="before")
+    @classmethod
+    def finite_numeric_or_none(cls, value):
+        return _none_if_non_finite(value)
 
     model_config = {"from_attributes": True}
 

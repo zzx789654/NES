@@ -160,3 +160,52 @@ def test_upload_nessus_missing_required_columns(client, admin_token):
 def test_scan_requires_auth(client):
     resp = client.get("/api/scans")
     assert resp.status_code == 401
+
+
+def test_upload_scan_sanitizes_non_finite_numeric_values(client, admin_token):
+    from decimal import Decimal
+    import math
+
+    parsed = {
+        "name": "Non Finite Scan",
+        "source": "nessus_csv",
+        "scan_date": None,
+        "host_count": 1,
+        "vuln_count": 1,
+        "vulnerabilities": [
+            {
+                "plugin_id": "90001",
+                "cve": "CVE-2024-9001",
+                "risk": "High",
+                "host": "192.0.2.10",
+                "port": "443",
+                "protocol": "tcp",
+                "name": "Non-finite numeric regression",
+                "cvss_v2_base": math.nan,
+                "cvss_v3_base": Decimal("NaN"),
+                "vpr": float("inf"),
+                "epss": None,
+            }
+        ],
+    }
+
+    with patch("routers.scans.parse_nessus_csv", return_value=parsed), patch(
+        "routers.scans.fetch_epss_scores", new=AsyncMock(return_value={"CVE-2024-9001": Decimal("NaN")})
+    ):
+        upload = client.post(
+            "/api/scans/upload",
+            data={"name": "Non Finite Scan"},
+            files={"file": ("scan.csv", io.BytesIO(b"Plugin ID,Risk,Host,Name\n1,High,192.0.2.10,x\n"), "text/csv")},
+            headers=auth(admin_token),
+        )
+
+    assert upload.status_code == 201, upload.text
+    scan_id = upload.json()["id"]
+
+    detail = client.get(f"/api/scans/{scan_id}", headers=auth(admin_token))
+    assert detail.status_code == 200, detail.text
+    vuln = detail.json()["vulnerabilities"][0]
+    assert vuln["cvss_v2_base"] is None
+    assert vuln["cvss_v3_base"] is None
+    assert vuln["vpr"] is None
+    assert vuln["epss"] is None

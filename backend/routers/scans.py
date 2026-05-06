@@ -1,6 +1,8 @@
 from datetime import date
 from typing import Optional
 import asyncio
+import math
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import insert, nulls_last
@@ -19,6 +21,16 @@ from services.epss_service import fetch_epss_scores
 router = APIRouter(prefix="/api/scans", tags=["scans"])
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
+
+def _finite_or_none(value):
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return value if value.is_finite() else None
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    return value
 
 
 @router.get("", response_model=list[ScanOut])
@@ -253,14 +265,14 @@ async def upload_scan(
             "solution":                 v.get("solution"),
             "plugin_output":            v.get("plugin_output"),
             "see_also":                 v.get("see_also"),
-            "cvss_v2_base":             v.get("cvss_v2_base"),
-            "cvss_v2_temporal":         v.get("cvss_v2_temporal"),
-            "cvss_v3_base":             v.get("cvss_v3_base") or v.get("cvss"),
-            "cvss_v3_temporal":         v.get("cvss_v3_temporal"),
-            "cvss_v4_base":             v.get("cvss_v4_base"),
-            "cvss_v4_threat_score":     v.get("cvss_v4_threat_score"),
-            "vpr":                      v.get("vpr"),
-            "epss":                     epss_val,
+            "cvss_v2_base":             _finite_or_none(v.get("cvss_v2_base")),
+            "cvss_v2_temporal":         _finite_or_none(v.get("cvss_v2_temporal")),
+            "cvss_v3_base":             _finite_or_none(v.get("cvss_v3_base") or v.get("cvss")),
+            "cvss_v3_temporal":         _finite_or_none(v.get("cvss_v3_temporal")),
+            "cvss_v4_base":             _finite_or_none(v.get("cvss_v4_base")),
+            "cvss_v4_threat_score":     _finite_or_none(v.get("cvss_v4_threat_score")),
+            "vpr":                      _finite_or_none(v.get("vpr")),
+            "epss":                     _finite_or_none(epss_val),
             "bid":                      v.get("bid"),
             "xref":                     v.get("xref"),
             "mskb":                     v.get("mskb"),
