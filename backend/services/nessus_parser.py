@@ -102,7 +102,11 @@ def parse_nessus_csv(content: bytes, scan_name: str, scan_date: date | None = No
 
     # ── Date columns ──────────────────────────────────────────────────────────
     for col in ("plugin_publication_date", "plugin_modification_date"):
+<<<<<<< HEAD
         parsed = pd.to_datetime(df[col], errors="coerce", format="mixed", dayfirst=False)
+=======
+        parsed = pd.to_datetime(df[col], errors="coerce", format="mixed")
+>>>>>>> aed8c901a4f2e374765ac4224421300afbe50a4b
         df[col] = [d.date() if not pd.isna(d) else None for d in parsed]
 
     # ── Bool columns ──────────────────────────────────────────────────────────
@@ -128,8 +132,14 @@ def parse_nessus_csv(content: bytes, scan_name: str, scan_date: date | None = No
                 v_dict[key] = val
         vulns.append(v_dict)
 
-    # Clean string fields: strip whitespace, convert 'nan' string → None
+    # Clean scalar values after to_dict(): pandas can keep float NaN values in
+    # record dictionaries, and those should be API/database nulls instead of
+    # leaking as JSON-incompatible NaN.
     for v in vulns:
+        for k, val in list(v.items()):
+            if val is not None and pd.isna(val):
+                v[k] = None
+
         for k in _STR_KEYS:
             val = v.get(k)
             if val is not None:

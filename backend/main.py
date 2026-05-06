@@ -40,6 +40,7 @@ def _run_migrations() -> None:
         logger.warning("alembic.ini not found — used create_all() as fallback")
         return
     cfg = AlembicConfig(alembic_ini)
+    cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
     alembic_command.upgrade(cfg, "head")
     logger.info("Database migrations up to date")
 
