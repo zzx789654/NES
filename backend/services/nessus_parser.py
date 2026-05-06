@@ -98,11 +98,11 @@ def parse_nessus_csv(content: bytes, scan_name: str, scan_date: date | None = No
         df[col] = pd.to_numeric(df[col], errors="coerce").round(1)
 
     # ── EPSS 4-decimal ────────────────────────────────────────────────────────
-    df["epss"] = pd.to_numeric(df["epss"], errors="coerce").round(3)
+    df["epss"] = pd.to_numeric(df["epss"], errors="coerce").round(4)
 
     # ── Date columns ──────────────────────────────────────────────────────────
     for col in ("plugin_publication_date", "plugin_modification_date"):
-        parsed = pd.to_datetime(df[col], errors="coerce")
+        parsed = pd.to_datetime(df[col], errors="coerce", format="mixed")
         df[col] = [d.date() if not pd.isna(d) else None for d in parsed]
 
     # ── Bool columns ──────────────────────────────────────────────────────────
@@ -118,8 +118,14 @@ def parse_nessus_csv(content: bytes, scan_name: str, scan_date: date | None = No
     # ── Serialise: NaN → None ─────────────────────────────────────────────────
     vulns = df.where(pd.notnull(df), None).to_dict("records")
 
-    # Clean string fields: strip whitespace, convert 'nan' string → None
+    # Clean scalar values after to_dict(): pandas can keep float NaN values in
+    # record dictionaries, and those should be API/database nulls instead of
+    # leaking as JSON-incompatible NaN.
     for v in vulns:
+        for k, val in list(v.items()):
+            if val is not None and pd.isna(val):
+                v[k] = None
+
         for k in _STR_KEYS:
             val = v.get(k)
             if val is not None:
