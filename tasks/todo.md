@@ -6,8 +6,8 @@
 ## 盤點結果
 
 ### 1. 資料持久化與資料庫功能
-- [ ] Vulnerability remediation status 欄位（追蹤修復進度，現僅模擬數據）
-- [ ] AuditEvent 專用表（審計日誌統計，現僅模擬數據）
+- [>] 實作 Vulnerability 狀態追蹤欄位 (status, remediation_date)
+- [>] 建立 SystemAuditLog 實體表取代現有的 Middleware 轉向 stdout
 - [ ] 多次掃描增量統計（目前僅以 scan_date，未支援多次掃描差異）
 
 ### 2. 前端功能

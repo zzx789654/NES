@@ -3,8 +3,9 @@ Report service — generate aggregated security reports
 """
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from models.scan import Scan, Vulnerability
-from models.audit import AuditScan
+from models.audit import AuditScan, SystemAuditLog
 from schemas.report import (
     RiskStats,
     ComplianceStats,
@@ -122,38 +123,44 @@ class ReportService:
     @staticmethod
     def get_remediation_stats(db: Session, start_date: datetime, end_date: datetime) -> RemediationStats | None:
         """Get remediation progress statistics"""
-        # Query vulnerabilities with status tracking (placeholder)
-        latest_scan = (
-            db.query(Scan)
-            .filter(Scan.scan_date >= start_date, Scan.scan_date <= end_date)
-            .order_by(Scan.scan_date.desc())
-            .first()
-        )
+        total = db.query(Vulnerability).join(Scan).filter(
+            Scan.scan_date >= start_date, Scan.scan_date <= end_date
+        ).count()
         
-        if not latest_scan or not latest_scan.vulnerabilities:
+        if total == 0:
             return None
+
+        fixed = db.query(Vulnerability).join(Scan).filter(
+            Scan.scan_date >= start_date, Scan.scan_date <= end_date,
+            Vulnerability.status == "fixed"
+        ).count()
         
-        # Count by status (assuming status field exists or can be computed)
-        # For now, return mock data based on actual structures
-        total = len(latest_scan.vulnerabilities)
-        remediated = max(0, int(total * 0.42))  # Placeholder: 42% remediation rate
-        pending = total - remediated
+        remediation_rate = (fixed / total * 100)
         
         return RemediationStats(
-            remediation_rate=42.0,  # Placeholder
-            average_remediation_days=14.0,  # Placeholder
-            pending_count=pending,
+            remediation_rate=round(remediation_rate, 1),
+            average_remediation_days=14.0,  # TODO: 需實作 remediation_date 減法計算
+            pending_count=total - fixed,
         )
 
     @staticmethod
     def get_audit_stats(db: Session, start_date: datetime, end_date: datetime) -> AuditStats | None:
         """Get audit log statistics"""
-        # Query audit events (placeholder - would need audit log table)
-        # For now return mock data
+        count = db.query(SystemAuditLog).filter(
+            SystemAuditLog.timestamp >= start_date,
+            SystemAuditLog.timestamp <= end_date
+        ).count()
+
+        anomalies = db.query(SystemAuditLog).filter(
+            SystemAuditLog.timestamp >= start_date,
+            SystemAuditLog.timestamp <= end_date,
+            SystemAuditLog.status_code >= 400
+        ).count()
+
         return AuditStats(
-            operation_count=234,
-            anomaly_count=3,
-            permission_changes=2,
+            operation_count=count,
+            anomaly_count=anomalies,
+            permission_changes=0, # TODO: 基於 action 類型過濾
         )
 
     @classmethod
