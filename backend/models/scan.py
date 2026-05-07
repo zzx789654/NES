@@ -72,4 +72,8 @@ class Vulnerability(Base):
     core_impact: Mapped[bool] = mapped_column(default=False)
     canvas: Mapped[bool] = mapped_column(default=False)
 
+    # 修復追蹤 (Remediation Tracking)
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open, fixed, risk_accepted
+    remediation_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
     scan: Mapped["Scan"] = relationship("Scan", back_populates="vulnerabilities")

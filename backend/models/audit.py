@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Optional
+from typing import Optional, Any
 from sqlalchemy import Integer, String, Date, DateTime, Text, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,3 +35,13 @@ class AuditResult(Base):
     actual_val: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     scan: Mapped["AuditScan"] = relationship("AuditScan", back_populates="results")
+
+class SystemAuditLog(Base):
+    __tablename__ = "system_audit_logs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    action: Mapped[str] = mapped_column(String(100))
+    resource: Mapped[str] = mapped_column(String(100))
+    details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status_code: Mapped[int] = mapped_column(Integer)
