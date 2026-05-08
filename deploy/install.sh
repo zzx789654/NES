@@ -8,13 +8,10 @@ WEB_DIR=/var/www/secvision
 REPO_DIR=$(cd "$(dirname "$0")/.." && pwd)
 SERVER_IP=$(hostname -I | awk '{print $1}')
 ADMIN_USER=${ADMIN_USER:-admin}
-ADMIN_PASS=${ADMIN_PASS:-Admin@123456}
+# ADMIN_PASS 預設在參數解析後決定（若未指定則自動產生隨機強密碼）
 
 # ── 預設值（可透過參數覆蓋）────────────────────────────────────────────────────
 DB_PASS="changeme_$(openssl rand -hex 6)"
-if [[ -z "${ADMIN_PASS:-}" ]]; then
-  ADMIN_PASS="Admin$(openssl rand -hex 4)"
-fi
 BRANCH=""
 
 while [[ $# -gt 0 ]]; do
@@ -25,6 +22,12 @@ while [[ $# -gt 0 ]]; do
     *) echo "未知參數: $1"; exit 1 ;;
   esac
 done
+
+# 若未透過 --admin-pass 或環境變數 ADMIN_PASS 指定，自動產生隨機密碼
+# 格式 Admin@<hex8> 符合密碼強度政策（大寫+數字+特殊字元+長度≥8）
+if [[ -z "${ADMIN_PASS:-}" ]]; then
+  ADMIN_PASS="Admin@$(openssl rand -hex 4)"
+fi
 
 echo "======================================================"
 echo "  SecVision ISMS Portal 部署腳本"

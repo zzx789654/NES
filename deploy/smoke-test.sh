@@ -35,4 +35,7 @@ curl -fsS "$BASE_URL/api/nist/scans" -H "$AUTH_HEADER" >/dev/null
 echo "==> IP groups list"
 curl -fsS "$BASE_URL/api/ipgroups" -H "$AUTH_HEADER" >/dev/null
 
+echo "==> Report modules list"
+curl -fsS "$BASE_URL/api/reports/modules" -H "$AUTH_HEADER" >/dev/null
+
 echo "✅ Smoke test passed"
