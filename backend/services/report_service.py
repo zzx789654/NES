@@ -3,7 +3,7 @@ Report service — generate aggregated security reports
 """
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_, and_, cast, Date
 from models.scan import Scan, Vulnerability
 from models.audit import AuditScan, SystemAuditLog
 from schemas.report import (
@@ -14,6 +14,17 @@ from schemas.report import (
     AuditStats,
     ReportData,
 )
+
+
+def _scan_in_range(model, start_date: datetime, end_date: datetime):
+    """Return a filter expression that matches scans within the date range.
+    Falls back to uploaded_at when scan_date is NULL."""
+    start = start_date.date()
+    end = end_date.date()
+    return or_(
+        and_(model.scan_date.isnot(None), model.scan_date >= start, model.scan_date <= end),
+        and_(model.scan_date.is_(None), model.uploaded_at >= start_date, model.uploaded_at <= end_date),
+    )
 
 
 class ReportService:
@@ -44,8 +55,8 @@ class ReportService:
         # Query vulnerabilities from latest scan
         latest_scan = (
             db.query(Scan)
-            .filter(Scan.scan_date >= start_date, Scan.scan_date <= end_date)
-            .order_by(Scan.scan_date.desc())
+            .filter(_scan_in_range(Scan, start_date, end_date))
+            .order_by(Scan.scan_date.desc().nullslast(), Scan.uploaded_at.desc())
             .first()
         )
         
@@ -65,8 +76,8 @@ class ReportService:
         """Get NIST compliance statistics"""
         latest_audit = (
             db.query(AuditScan)
-            .filter(AuditScan.scan_date >= start_date, AuditScan.scan_date <= end_date)
-            .order_by(AuditScan.scan_date.desc())
+            .filter(_scan_in_range(AuditScan, start_date, end_date))
+            .order_by(AuditScan.scan_date.desc().nullslast(), AuditScan.uploaded_at.desc())
             .first()
         )
         
@@ -90,8 +101,7 @@ class ReportService:
     def get_scan_efficiency_stats(db: Session, start_date: datetime, end_date: datetime) -> ScanEfficiencyStats | None:
         """Get scan efficiency statistics"""
         scans = db.query(Scan).filter(
-            Scan.scan_date >= start_date,
-            Scan.scan_date <= end_date,
+            _scan_in_range(Scan, start_date, end_date)
         ).all()
         
         if not scans:
@@ -124,14 +134,14 @@ class ReportService:
     def get_remediation_stats(db: Session, start_date: datetime, end_date: datetime) -> RemediationStats | None:
         """Get remediation progress statistics"""
         total = db.query(Vulnerability).join(Scan).filter(
-            Scan.scan_date >= start_date, Scan.scan_date <= end_date
+            _scan_in_range(Scan, start_date, end_date)
         ).count()
-        
+
         if total == 0:
             return None
 
         fixed = db.query(Vulnerability).join(Scan).filter(
-            Scan.scan_date >= start_date, Scan.scan_date <= end_date,
+            _scan_in_range(Scan, start_date, end_date),
             Vulnerability.status == "fixed"
         ).count()
         
