@@ -107,6 +107,7 @@
   // ── 我的帳號 ──────────────────────────────────────────────────────────────
 
   function MyAccountCard({ me, onPasswordChanged }) {
+    const [currentPw, setCurrentPw] = useState('');
     const [pw, setPw] = useState('');
     const [pw2, setPw2] = useState('');
     const [saving, setSaving] = useState(false);
@@ -116,12 +117,13 @@
     async function handleChangePassword(e) {
       e.preventDefault();
       setErr(''); setOk('');
+      if (!currentPw) { setErr('請輸入目前密碼'); return; }
       if (pw !== pw2) { setErr('兩次輸入的密碼不一致'); return; }
       setSaving(true);
       try {
-        await APIClient.changePassword(me.id, pw);
+        await APIClient.changeOwnPassword(currentPw, pw);
         setOk('密碼已成功變更');
-        setPw(''); setPw2('');
+        setCurrentPw(''); setPw(''); setPw2('');
         if (onPasswordChanged) onPasswordChanged();
       } catch (ex) {
         setErr(ex.message);
@@ -152,6 +154,11 @@
           <form onSubmit={handleChangePassword}>
             <Alert msg={err} type="error" />
             <Alert msg={ok} type="success" />
+            <div style={{ marginBottom: 12 }}>
+              <Field label="目前密碼">
+                <Input type="password" value={currentPw} onChange={setCurrentPw} placeholder="請輸入目前密碼" />
+              </Field>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
               <Field label="新密碼">
                 <Input type="password" value={pw} onChange={setPw} placeholder="至少 8 字元，含大寫、數字、符號" />
@@ -160,7 +167,7 @@
                 <Input type="password" value={pw2} onChange={setPw2} placeholder="再輸入一次" />
               </Field>
             </div>
-            <Btn disabled={saving || !pw || !pw2}>
+            <Btn disabled={saving || !currentPw || !pw || !pw2}>
               {saving ? '儲存中…' : '變更密碼'}
             </Btn>
           </form>

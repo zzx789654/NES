@@ -85,10 +85,19 @@ const APIClient = (() => {
       sessionStorage.removeItem(TOKEN_KEY);
     },
 
+    // For admins resetting another user's password (no current password needed)
     changePassword(userId, newPassword) {
       return req('/api/auth/users/' + userId + '/password', {
         method: 'PUT',
         body: JSON.stringify({ new_password: newPassword }),
+      });
+    },
+
+    // For users changing their own password (current password required)
+    changeOwnPassword(currentPassword, newPassword) {
+      return req('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
       });
     },
 
