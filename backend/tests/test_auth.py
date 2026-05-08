@@ -97,11 +97,11 @@ def test_change_password_success(client, db):
     token = login.json()["access_token"]
     resp = client.post(
         "/api/auth/change-password",
-        json={"current_password": "oldpass123", "new_password": "newpass123"},
+        json={"current_password": "oldpass123", "new_password": "Newpass123!"},
         headers=auth(token),
     )
     assert resp.status_code == 204
-    relogin = client.post("/api/auth/token", data={"username": "changeme", "password": "newpass123"})
+    relogin = client.post("/api/auth/token", data={"username": "changeme", "password": "Newpass123!"})
     assert relogin.status_code == 200
 
 
@@ -110,7 +110,7 @@ def test_change_password_wrong_current_password(client, db):
     token = client.post("/api/auth/token", data={"username": "wrongcurrent", "password": "oldpass123"}).json()["access_token"]
     resp = client.post(
         "/api/auth/change-password",
-        json={"current_password": "bad-old", "new_password": "newpass123"},
+        json={"current_password": "bad-old", "new_password": "Newpass123!"},
         headers=auth(token),
     )
     assert resp.status_code == 400
@@ -119,6 +119,6 @@ def test_change_password_wrong_current_password(client, db):
 def test_change_password_requires_auth(client):
     resp = client.post(
         "/api/auth/change-password",
-        json={"current_password": "oldpass123", "new_password": "newpass123"},
+        json={"current_password": "oldpass123", "new_password": "Newpass123!"},
     )
     assert resp.status_code == 401

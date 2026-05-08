@@ -26,7 +26,8 @@ NES/
 │   ├── Dashboard.jsx
 │   ├── VulnScan.jsx
 │   ├── NIST.jsx
-│   └── Report.jsx
+│   ├── Report.jsx
+│   └── UserManagement.jsx
 ├── backend/
 │   ├── main.py           # FastAPI + 安全中介軟體
 │   ├── config.py         # pydantic-settings 設定
@@ -36,8 +37,8 @@ NES/
 │   ├── routers/
 │   ├── schemas/
 │   ├── services/
-│   ├── tests/            # 91 測試，100% 通過率
-│   └── alembic/
+│   ├── tests/            # 104 測試，100% 通過率
+│   └── alembic/          # 5 個 migrations（0001–0005）
 ├── deploy/
 │   ├── install.sh
 │   ├── nginx.conf
@@ -118,7 +119,10 @@ API 文件：`http://127.0.0.1:8000/docs`
 - `POST /api/auth/token`：登入取得 JWT（速率限制 10次/分/IP）
 - `GET /api/auth/me`：取得目前使用者
 - `POST /api/auth/register`：管理員建立帳號（密碼強度政策強制）
-- `POST /api/auth/change-password`：登入後變更自己的密碼
+- `POST /api/auth/change-password`：登入後變更**自己**的密碼（需提供目前密碼）
+- `GET /api/auth/users`：列出所有使用者（admin only）
+- `PUT /api/auth/users/{id}/password`：管理員重設他人密碼（免驗舊密碼）
+- `DELETE /api/auth/users/{id}`：刪除使用者（admin only）
 
 ### Scans
 
@@ -151,6 +155,14 @@ API 文件：`http://127.0.0.1:8000/docs`
 - `PUT /api/ipgroups/{id}`（重名防護，回傳 409）
 - `DELETE /api/ipgroups/{id}`
 
+### Reports
+
+- `POST /api/reports/generate`：生成報表（支援 5 模組：risk_overview / compliance / scan_efficiency / remediation_progress / audit_log）
+- `GET /api/reports/modules`：列出可用報表模組
+
+支援時間範圍：`7d` / `30d` / `90d` / `custom`（自訂起訖日）  
+輸出格式：`html` / `csv` / `pdf`
+
 ---
 
 ## 資安功能
@@ -160,7 +172,8 @@ API 文件：`http://127.0.0.1:8000/docs`
 | Rate Limiting | `main.py` + slowapi | 登入 10次/分；上傳 5次/分 |
 | Security Headers | `main.py SecurityHeadersMiddleware` | X-Frame-Options, CSP 等 6 項 |
 | Audit Logging | `main.py AuditLogMiddleware` | JSON 結構化請求稽核日誌 |
-| Password Policy | `schemas/auth.py` | 8字元+大寫+數字+特殊字元 |
+| Password Policy | `schemas/auth.py` | 8字元+大寫+數字+特殊字元（建立與修改密碼均強制） |
+| Self-PW Change | `POST /api/auth/change-password` | 需驗證目前密碼；前端 UI 設有「目前密碼」欄位 |
 | File Upload Guard | `routers/scans.py` | 50MB 上限 + Magic Bytes 驗證 |
 | JWT RBAC | `routers/auth.py` | admin / analyst / viewer 三級 |
 
@@ -186,21 +199,24 @@ API 文件：`http://127.0.0.1:8000/docs`
 
 ```bash
 cd backend
-pytest -q
+pip install pytest
+TESTING=1 pytest -q
 ```
 
 測試套件：
 
 | 套件 | 測試數 | 說明 |
 |------|--------|------|
-| test_auth.py | 10 | JWT、RBAC、密碼政策 |
-| test_scans.py | 13 | 上傳、Diff、權限 |
-| test_nist.py | 11 | Audit 上傳、趨勢 |
+| test_auth.py | 14 | JWT、RBAC、密碼政策、使用者管理 |
+| test_scans.py | 19 | 上傳、Diff、權限、分頁 |
+| test_nist.py | 14 | Audit 上傳、趨勢、Diff |
 | test_dashboard.py | 4 | 聚合統計 |
 | test_ipgroups.py | 10 | CRUD、重名防護 |
-| test_nessus_fields.py | 13 | 31 欄位解析 |
+| test_nessus_fields.py | 15 | 31 欄位解析 |
 | test_services.py | 18 | Parser、Diff 邏輯 |
-| **合計** | **91** | **100% 通過率** |
+| test_reports.py | 7 | 報表生成、模組選擇、時間範圍 |
+| test_scan_schemas.py | 1 | 非有限數值序列化 |
+| **合計** | **104** | **100% 通過率** |
 
 ---
 
@@ -214,6 +230,33 @@ pytest -q
 - `deploy/smoke-test.sh`
 
 ### 自動安裝流程
+
+安裝腳本 (`deploy/install.sh`) 執行以下 11 個步驟：
+
+| 步驟 | 說明 |
+|------|------|
+| 0 | 從 git 拉取最新程式碼 |
+| 1 | 安裝系統套件（python3.12、postgresql、nginx） |
+| 2 | 建立 PostgreSQL 使用者與資料庫 |
+| 3 | 建立系統使用者 `secvision` |
+| 4 | 部署後端、建立 venv、產生 `.env`（含隨機 SECRET_KEY） |
+| 5 | 執行 `alembic upgrade head`（自動套用所有 migrations） |
+| 6 | 建立預設管理者帳號 |
+| 7 | 複製前端靜態檔案至 `/var/www/secvision` |
+| 8 | 安裝並啟動 systemd 服務 |
+| 9 | 部署 Nginx 反向代理設定 |
+| 10 | 驗證管理者登入 |
+| 11 | 執行核心 API Smoke Test |
+
+**管理者密碼**：若未透過 `--admin-pass` 或 `ADMIN_PASS` 環境變數指定，安裝腳本會自動產生符合密碼強度規範的隨機密碼（格式：`Admin@<hex8>`），並於安裝結束時顯示。
+
+```bash
+# 自訂密碼安裝
+bash deploy/install.sh --admin-pass 'MySecret@2024' --db-pass 'DbPass@2024'
+
+# 全自動安裝（admin 密碼自動產生）
+bash deploy/install.sh
+```
 
 - 安裝腳本會建立 `/opt/secvision/backend/.env`，寫入 `DATABASE_URL`、`SECRET_KEY` 與 `ALLOWED_ORIGINS`。
 - PostgreSQL 使用者 `secvision` 會在部署時同步更新密碼，避免帳密不一致。
@@ -237,6 +280,55 @@ ALLOWED_ORIGINS=https://yourdomain.com
 ```
 
 > ⚠️ 請勿在生產環境使用預設的 `dev-secret-key-change-in-production`。
+
+---
+
+## 系統審查紀錄（2026-05-08 安裝流程與前後端連接全面審查）
+
+### 本次審查範圍
+- 前端所有頁面（Login / Dashboard / VulnScan / NIST / Report / UserManagement）與後端 API 連接完整性
+- 自動安裝流程（install.sh、create-admin.sh、smoke-test.sh、redeploy-backend.sh）
+- Alembic migration 完整性
+
+### 發現並修復的問題
+
+| 嚴重度 | 問題 | 修復 |
+|--------|------|------|
+| 🔴 嚴重 | `system_audit_logs` 表未在任何 migration 建立，生產環境報表 audit_log 模組會崩潰 | 新增 `alembic/versions/0004_add_system_audit_logs.py` |
+| 🔴 嚴重 | `Vulnerability` 模型的 `status`、`remediation_date` 欄位未在任何 migration 中，導致 `/api/dashboard`、`/api/scans/{id}/vulns`、`/api/scans/diff` 全部 HTTP 500 | 新增 `alembic/versions/0005_add_vuln_status_remediation.py` |
+| 🔴 安全 | 自我密碼變更端點使用 `PUT /users/{id}/password`（不驗舊密碼），應使用 `POST /change-password` | `app.jsx`、`UserManagement.jsx` 改呼叫 `changeOwnPassword()`，UI 加入「目前密碼」欄位 |
+| 🟡 邏輯 | `install.sh` 隨機密碼生成是 dead code（因 ADMIN_PASS 提前賦值導致條件永不成立） | 移至參數解析之後判斷，預設自動生成 `Admin@<hex8>` |
+| 🟡 一致性 | `PasswordChange.new_password` 強度規則（僅長度+數字）弱於 `UserCreate.password`（4 項要求） | 補齊大寫字母與特殊字元驗證 |
+| 🟢 遺漏 | `smoke-test.sh` 未測試 `/api/reports/modules`（新報表路由） | 加入 Reports 模組列表端點測試 |
+| 🟢 遺漏 | `create-admin.sh` 無密碼強度警告，弱密碼可靜默通過 | 加入最低強度檢查並輸出警告訊息 |
+
+### 前後端 API 連接驗證結果
+
+全部 API 端點對應正確，無缺少或路徑不符：
+
+| 頁面 | 使用端點 | 狀態 |
+|------|---------|------|
+| Login | `POST /api/auth/token` | ✅ |
+| Dashboard | `GET /api/dashboard` | ✅ |
+| VulnScan | `GET/POST/DELETE /api/scans/*` + `/api/ipgroups` | ✅ |
+| NIST | `GET/POST/DELETE /api/nist/*` | ✅ |
+| Report | `POST /api/reports/generate` + `GET /api/reports/modules` | ✅ |
+| UserManagement | `GET/PUT/DELETE /api/auth/users/*` + `POST /api/auth/change-password` | ✅ |
+
+### 測試結果
+
+| 測試套件 | 結果 |
+|---------|------|
+| test_auth.py | ✅ 14/14 |
+| test_dashboard.py | ✅ 4/4 |
+| test_ipgroups.py | ✅ 10/10 |
+| test_nessus_fields.py | ✅ 15/15 |
+| test_nist.py | ✅ 14/14 |
+| test_reports.py | ✅ 7/7 |
+| test_scan_schemas.py | ✅ 1/1 |
+| test_scans.py | ✅ 19/19 |
+| test_services.py | ✅ 18/18 |
+| **合計** | **✅ 104/104 (100%)** |
 
 ---
 

@@ -117,6 +117,7 @@ function App() {
   const [stats, setStats] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -153,6 +154,7 @@ function App() {
   }
 
   function resetPasswordForm() {
+    setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
     setPasswordError('');
@@ -166,6 +168,10 @@ function App() {
   async function submitChangePassword(e) {
     e.preventDefault();
     if (!currentUser) return;
+    if (!currentPassword) {
+      setPasswordError('請輸入目前密碼。');
+      return;
+    }
     if (!newPassword) {
       setPasswordError('請輸入新密碼。');
       return;
@@ -176,7 +182,7 @@ function App() {
     }
     setSavingPassword(true);
     try {
-      await APIClient.changePassword(currentUser.id, newPassword);
+      await APIClient.changeOwnPassword(currentPassword, newPassword);
       setChangePasswordOpen(false);
       alert('✅ 密碼已更新');
     } catch (err) {
@@ -213,6 +219,17 @@ function App() {
         <Modal open={changePasswordOpen} title="變更密碼" onClose={() => setChangePasswordOpen(false)} width={520}>
           <form onSubmit={submitChangePassword}>
             <div style={{ display: 'grid', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>目前密碼</label>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={e => setCurrentPassword(e.target.value)}
+                  placeholder="請輸入目前密碼"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--rsm)', border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: 13 }}
+                  autoComplete="current-password"
+                />
+              </div>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>新密碼</label>
                 <input

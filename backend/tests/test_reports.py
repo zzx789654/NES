@@ -62,11 +62,11 @@ def test_generate_report_without_data(client, admin_token):
 
 def test_generate_report_with_scan_data(client, admin_token):
     """Test report generation with actual scan data"""
-    # First upload a scan
+    # First upload a scan (no scan_date so it defaults to today, within the 30d window)
     with patch("routers.scans.fetch_epss_scores", new=AsyncMock(return_value={})):
         client.post(
             "/api/scans/upload",
-            data={"name": "S1", "scan_date": "2024-01-15"},
+            data={"name": "S1"},
             files={"file": ("scan.csv", io.BytesIO(NESSUS_CSV), "text/csv")},
             headers=auth(admin_token),
         )
@@ -107,14 +107,14 @@ def test_generate_report_with_scan_data(client, admin_token):
 
 def test_generate_report_compliance_module(client, admin_token):
     """Test report generation with compliance module"""
-    # First upload an audit scan
-    with patch("routers.nist.fetch_epss_scores", new=AsyncMock(return_value={})):
-        client.post(
-            "/api/nist/upload",
-            data={"name": "Audit1", "scan_date": "2024-01-15"},
-            files={"file": ("audit.csv", io.BytesIO(AUDIT_CSV), "text/csv")},
-            headers=auth(admin_token),
-        )
+    # First upload an audit scan (no scan_date so it defaults to today, within the 30d window)
+    # nist.py does not use fetch_epss_scores, so no patch is needed
+    client.post(
+        "/api/nist/upload",
+        data={"name": "Audit1"},
+        files={"file": ("audit.csv", io.BytesIO(AUDIT_CSV), "text/csv")},
+        headers=auth(admin_token),
+    )
     
     # Generate a compliance report
     request_body = {

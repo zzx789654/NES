@@ -48,6 +48,9 @@ sudo mkdir -p "$BACKEND_DIR"
 sudo cp -a "$REPO_DIR/backend/." "$BACKEND_DIR/"
 sudo chown -R secvision:secvision "$BACKEND_DIR"
 
+echo "==> Update Python dependencies"
+sudo /opt/secvision/venv/bin/pip install -q -r "$BACKEND_DIR/requirements.txt"
+
 echo "==> Sync frontend files"
 DEPLOY_VERSION=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)
 sudo mkdir -p "$WEB_DIR"
@@ -68,7 +71,24 @@ sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 
 echo "==> Run database migrations"
-cd "$BACKEND_DIR" && sudo -u secvision /opt/secvision/venv/bin/alembic upgrade head
+cd "$BACKEND_DIR"
+# 若資料表已存在但無 alembic_version（例如由 create_all() 或 TESTING 模式建立），
+# 先 stamp 至 head；否則 alembic 會試圖重建已存在的資料表而失敗。
+_UNVERSIONED=$(sudo -u secvision /opt/secvision/venv/bin/python3 - <<'PY' 2>/dev/null
+try:
+    from sqlalchemy import inspect
+    from database import engine
+    t = inspect(engine).get_table_names()
+    print("yes" if "scans" in t and "alembic_version" not in t else "no")
+except Exception:
+    print("no")
+PY
+)
+if [[ "${_UNVERSIONED:-no}" == "yes" ]]; then
+  echo "  ⚠️  偵測到未版本化資料庫，先 stamp 至 head（保留既有資料，跳過建表）"
+  sudo -u secvision /opt/secvision/venv/bin/alembic stamp head
+fi
+sudo -u secvision /opt/secvision/venv/bin/alembic upgrade head
 
 echo "==> Restart services"
 sudo systemctl daemon-reload

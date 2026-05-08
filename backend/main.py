@@ -27,7 +27,6 @@ logger = logging.getLogger("main")
 
 def _run_migrations() -> None:
     """Apply any pending Alembic migrations before serving traffic."""
-    # In testing mode, skip Alembic and use Base.metadata.create_all()
     if os.getenv("TESTING", "").lower() == "true":
         Base.metadata.create_all(bind=engine)
         logger.info("Testing mode: used create_all() instead of Alembic")
@@ -35,12 +34,26 @@ def _run_migrations() -> None:
 
     alembic_ini = os.path.join(os.path.dirname(__file__), "alembic.ini")
     if not os.path.exists(alembic_ini):
-        # Fallback for environments without alembic config (e.g. bare dev clone)
         Base.metadata.create_all(bind=engine)
         logger.warning("alembic.ini not found — used create_all() as fallback")
         return
+
     cfg = AlembicConfig(alembic_ini)
     cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "alembic"))
+
+    # Guard: if app tables exist but alembic_version doesn't, the DB was bootstrapped
+    # via create_all() (e.g. TESTING mode or create-admin.sh run before alembic).
+    # Stamping at head tells Alembic the schema is current so it skips table-creation
+    # migrations that would otherwise fail with "table already exists".
+    from sqlalchemy import inspect as _sa_inspect, text as _sa_text
+    with engine.connect() as _conn:
+        _insp = _sa_inspect(engine)
+        _tables = _insp.get_table_names()
+        if "scans" in _tables and "alembic_version" not in _tables:
+            alembic_command.stamp(cfg, "head")
+            logger.warning("Unversioned DB detected — stamped at Alembic head (schema assumed current)")
+            return
+
     alembic_command.upgrade(cfg, "head")
     logger.info("Database migrations up to date")
 

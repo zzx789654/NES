@@ -25,6 +25,16 @@ if [[ ! "$ROLE" =~ ^(admin|analyst|viewer)$ ]]; then
   exit 1
 fi
 
+# 密碼強度最低檢查（與 API PasswordChange 驗證器一致）
+_pw_ok=true
+[[ ${#PASSWORD} -lt 8 ]]               && _pw_ok=false && echo "⚠️  密碼長度不足 8 字元"
+[[ ! "$PASSWORD" =~ [A-Z] ]]           && _pw_ok=false && echo "⚠️  密碼缺少大寫字母"
+[[ ! "$PASSWORD" =~ [0-9] ]]           && _pw_ok=false && echo "⚠️  密碼缺少數字"
+[[ ! "$PASSWORD" =~ [@\$\!%\*\?&_\-#\^] ]] && _pw_ok=false && echo "⚠️  密碼缺少特殊字元 (@\$!%*?&_-#^)"
+if [[ "$_pw_ok" == false ]]; then
+  echo "⚠️  密碼不符合強度要求，建議使用符合規範的密碼（此腳本仍會繼續建立帳號）"
+fi
+
 cd "$BACKEND_DIR"
 "$VENV_PY" - "$USERNAME" "$PASSWORD" "$ROLE" <<'PY'
 import sys
