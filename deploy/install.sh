@@ -88,6 +88,22 @@ sudo chown -R secvision:secvision $APP_DIR
 
 echo "=== 5. 初始化資料庫 Schema ==="
 cd $APP_DIR/backend
+# 若資料表已存在但無 alembic_version（覆蓋安裝或先前由 create_all() 建立），
+# 先 stamp 至 head 以避免重建已存在的資料表。
+_UNVERSIONED=$(sudo -u secvision $APP_DIR/venv/bin/python3 - <<'PY' 2>/dev/null
+try:
+    from sqlalchemy import inspect
+    from database import engine
+    t = inspect(engine).get_table_names()
+    print("yes" if "scans" in t and "alembic_version" not in t else "no")
+except Exception:
+    print("no")
+PY
+)
+if [[ "${_UNVERSIONED:-no}" == "yes" ]]; then
+  echo "  ⚠️  偵測到未版本化資料庫，先 stamp 至 head（保留既有資料，跳過建表）"
+  sudo -u secvision $APP_DIR/venv/bin/alembic stamp head
+fi
 sudo -u secvision $APP_DIR/venv/bin/alembic upgrade head
 
 echo "=== 6. 建立預設管理者 ==="
