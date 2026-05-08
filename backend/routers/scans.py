@@ -168,15 +168,7 @@ def list_scan_vulns(
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
 
-    q = db.query(Vulnerability).filter(Vulnerability.scan_id == scan_id)
-    if risk:
-        q = q.filter(Vulnerability.risk == risk)
-    if hosts:
-        host_values = [h.strip() for h in hosts.split(',') if h.strip()]
-        if host_values:
-            q = q.filter(Vulnerability.host.in_(host_values))
     q = _query_scan_vulns(scan_id, db, search=search, risk=risk, hosts=hosts)
-
     total = q.count()
 
     sort_map = {
