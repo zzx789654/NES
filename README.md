@@ -38,7 +38,7 @@ NES/
 │   ├── schemas/
 │   ├── services/
 │   ├── tests/            # 104 測試，100% 通過率
-│   └── alembic/          # 4 個 migrations（0001–0004）
+│   └── alembic/          # 5 個 migrations（0001–0005）
 ├── deploy/
 │   ├── install.sh
 │   ├── nginx.conf
@@ -295,6 +295,7 @@ ALLOWED_ORIGINS=https://yourdomain.com
 | 嚴重度 | 問題 | 修復 |
 |--------|------|------|
 | 🔴 嚴重 | `system_audit_logs` 表未在任何 migration 建立，生產環境報表 audit_log 模組會崩潰 | 新增 `alembic/versions/0004_add_system_audit_logs.py` |
+| 🔴 嚴重 | `Vulnerability` 模型的 `status`、`remediation_date` 欄位未在任何 migration 中，導致 `/api/dashboard`、`/api/scans/{id}/vulns`、`/api/scans/diff` 全部 HTTP 500 | 新增 `alembic/versions/0005_add_vuln_status_remediation.py` |
 | 🔴 安全 | 自我密碼變更端點使用 `PUT /users/{id}/password`（不驗舊密碼），應使用 `POST /change-password` | `app.jsx`、`UserManagement.jsx` 改呼叫 `changeOwnPassword()`，UI 加入「目前密碼」欄位 |
 | 🟡 邏輯 | `install.sh` 隨機密碼生成是 dead code（因 ADMIN_PASS 提前賦值導致條件永不成立） | 移至參數解析之後判斷，預設自動生成 `Admin@<hex8>` |
 | 🟡 一致性 | `PasswordChange.new_password` 強度規則（僅長度+數字）弱於 `UserCreate.password`（4 項要求） | 補齊大寫字母與特殊字元驗證 |
