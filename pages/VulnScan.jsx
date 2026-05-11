@@ -337,7 +337,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
   const [detail, setDetail] = useState(null);
   const [scanHosts, setScanHosts] = useState([]);
   const [vulnPage, setVulnPage] = useState({ items: [], total: 0, page: 1, page_size: 200 });
-  const [sortBy, setSortBy] = useState('host');
+  const [sortBy, setSortBy] = useState('risk');
   const [sortDir, setSortDir] = useState('asc');
   const [diffData, setDiffData] = useState(null);
   const [diffBase, setDiffBase] = useState(null);
@@ -631,16 +631,16 @@ function VulnScanPage({ onStatsChange, currentUser }) {
   }), [diffRows]);
 
   const ALL_COLS = [
-    { key: 'risk', label: '嚴重等級' },
-    { key: 'host', label: '主機' },
-    { key: 'port', label: 'Port' },
-    { key: 'plugin_id', label: 'Plugin ID' },
-    { key: 'name', label: '弱點名稱' },
-    { key: 'cve', label: 'CVE' },
-    { key: 'cvss_v2_base', label: 'CVSS v2' },
-    { key: 'cvss_v3_base', label: 'CVSS v3' },
-    { key: 'epss', label: 'EPSS' },
-    { key: 'vpr', label: 'VPR' },
+    { key: 'risk', label: '嚴重等級', help: '預設依 Critical → High → Medium → Low → Info 呈現' },
+    { key: 'host', label: '主機', help: '受影響資產 IP 或主機名稱' },
+    { key: 'port', label: 'Port', help: '受影響服務連接埠' },
+    { key: 'plugin_id', label: 'Plugin ID', help: 'Nessus Plugin 識別碼' },
+    { key: 'name', label: '弱點名稱', help: '點擊資料列可展開摘要與修補建議' },
+    { key: 'cve', label: 'CVE', help: '對應 CVE 編號' },
+    { key: 'cvss_v2_base', label: 'CVSS v2', help: 'CVSS v2 基礎分數' },
+    { key: 'cvss_v3_base', label: 'CVSS v3', help: 'CVSS v3 基礎分數' },
+    { key: 'epss', label: 'EPSS', help: '30 天內被利用機率，≥ 0.1 以高風險標示' },
+    { key: 'vpr', label: 'VPR', help: 'Tenable 漏洞優先度，≥ 7 以高風險標示' },
     { key: 'synopsis', label: '摘要' },
     { key: 'solution', label: '修補建議' },
   ];
@@ -659,6 +659,25 @@ function VulnScanPage({ onStatsChange, currentUser }) {
 
   const epssVulns = useMemo(() => matrixSource.filter(v => v.epss != null && v.cvss_v3_base != null && parseFloat(v.cvss_v3_base) > 0), [matrixSource]);
   const vprVulns = useMemo(() => matrixSource.filter(v => v.vpr != null && v.cvss_v3_base != null && parseFloat(v.cvss_v3_base) > 0), [matrixSource]);
+  const priorityRows = useMemo(() => matrixSource
+    .filter(v => parseFloat(v.cvss_v3_base || 0) >= 7 && parseFloat(v.epss || 0) >= 0.1)
+    .sort((a, b) => {
+      const sevCmp = (SEV_ORDER[a.risk] ?? 99) - (SEV_ORDER[b.risk] ?? 99);
+      if (sevCmp !== 0) return sevCmp;
+      return parseFloat(b.epss || 0) - parseFloat(a.epss || 0);
+    }), [matrixSource]);
+  const severityOrderText = 'Critical → High → Medium → Low → Info';
+  const activeSortColumn = columns.find(col => col.key === sortBy);
+  const currentSortLabel = sortBy === 'risk'
+    ? (sortDir === 'asc' ? `風險由高到低（${severityOrderText}）` : `風險由低到高（Info → Low → Medium → High → Critical）`)
+    : `${activeSortColumn?.label || sortBy} ${sortDir === 'asc' ? '由小到大 / A→Z' : '由大到小 / Z→A'}`;
+  const visibleStart = vulnPage.total === 0 ? 0 : (vulnPage.page - 1) * vulnPage.page_size + 1;
+  const visibleEnd = Math.min(vulnPage.page * vulnPage.page_size, vulnPage.total);
+  const activeFilterLabels = [
+    sevFilter !== 'all' ? `等級：${sevFilter}` : null,
+    selectedIPs.length > 0 ? `IP：${selectedIPs.length} 個` : null,
+    search ? `搜尋：${search}` : null,
+  ].filter(Boolean);
 
   if (loading) {
     return <div style={{ padding: 40, color: 'var(--text2)' }}>載入中…</div>;
@@ -713,9 +732,35 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                 {['Critical', 'High', 'Medium', 'Low', 'Info'].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
               <SearchBar value={searchInput} onChange={setSearchInput} placeholder="搜尋 IP / 弱點名稱 / CVE…" />
-              <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text2)', fontFamily: 'var(--font-mono)' }}>
-                第 {vulnPage.page} / {Math.max(1, Math.ceil(vulnPage.total / vulnPage.page_size))} 頁 · 共 {vulnPage.total} 筆{selectedIPs.length > 0 ? ` · ${selectedIPs.length} IP 篩選中` : ''}
-              </span>
+              <button onClick={() => { setSearchInput(''); setSearch(''); setSevFilter('all'); setSelectedIPs([]); setSortBy('risk'); setSortDir('asc'); setVulnPage(prev => ({ ...prev, page: 1 })); }}
+                style={{ marginLeft: 'auto', padding: '7px 11px', borderRadius: 'var(--rsm)', border: '1px solid var(--border)', background: activeFilterLabels.length > 0 || sortBy !== 'risk' || sortDir !== 'asc' ? 'var(--surface2)' : 'transparent', color: activeFilterLabels.length > 0 || sortBy !== 'risk' || sortDir !== 'asc' ? 'var(--text)' : 'var(--text3)', fontSize: 12, cursor: 'pointer' }}>
+                重設檢視
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'stretch' }}>
+              <div style={{ flex: '2 1 320px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '12px 14px' }}>
+                <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>目前排序</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ padding: '4px 9px', borderRadius: 99, background: 'var(--accent-bg)', color: 'var(--accent)', fontSize: 12, fontWeight: 700 }}>{currentSortLabel}</span>
+                  <span style={{ color: 'var(--text3)', fontSize: 12 }}>點擊欄位標題可切換排序；點擊資料列可展開詳情。</span>
+                </div>
+              </div>
+              <div style={{ flex: '1 1 220px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '12px 14px' }}>
+                <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>顯示結果</div>
+                <div style={{ color: 'var(--text)', fontSize: 13, fontFamily: 'var(--font-mono)' }}>{visibleStart}-{visibleEnd} / {vulnPage.total} 筆</div>
+                <div style={{ color: 'var(--text3)', fontSize: 12, marginTop: 4 }}>第 {vulnPage.page} / {Math.max(1, Math.ceil(vulnPage.total / vulnPage.page_size))} 頁 · 每頁 {vulnPage.page_size} 筆</div>
+              </div>
+              <div style={{ flex: '1 1 260px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '12px 14px' }}>
+                <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>作用中篩選</div>
+                {activeFilterLabels.length === 0 ? (
+                  <span style={{ color: 'var(--text3)', fontSize: 12 }}>無篩選，顯示所有弱點</span>
+                ) : (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {activeFilterLabels.map(label => <span key={label} style={{ padding: '3px 8px', borderRadius: 99, background: 'var(--surface2)', color: 'var(--text2)', fontSize: 12 }}>{label}</span>)}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '12px' }}>
@@ -746,6 +791,13 @@ function VulnScanPage({ onStatsChange, currentUser }) {
             </div>
 
             <Card noPad>
+              <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>弱點清單</div>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 3 }}>預設依風險優先順序排序：{severityOrderText}</div>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text2)' }}>目前欄位：{visibleCols.length} / {ALL_COLS.length}</div>
+              </div>
               <DataTable columns={columns} rows={filteredVulns} maxHeight={520} serverSide onSort={(col, dir) => { setSortBy(col); setSortDir(dir); setVulnPage(prev => ({ ...prev, page: 1 })); }} sortBy={sortBy} sortDir={sortDir} onRowClick={row => {
                 if (expandedRow?.id === row.id) {
                   setExpandedRow(null);
@@ -970,9 +1022,9 @@ function VulnScanPage({ onStatsChange, currentUser }) {
               </div>
             )}
 
-            <Card title="優先修補清單 — CVSS ≥ 7 且 EPSS ≥ 0.1">
+            <Card title={`優先修補清單 — CVSS ≥ 7 且 EPSS ≥ 0.1（${priorityRows.length} 筆，先看高風險）`}>
               <DataTable compact maxHeight={280}
-                rows={matrixSource.filter(v => parseFloat(v.cvss_v3_base || 0) >= 7 && parseFloat(v.epss || 0) >= 0.1).sort((a, b) => parseFloat(b.epss || 0) - parseFloat(a.epss || 0))}
+                rows={priorityRows}
                 columns={[
                   { key: 'risk', label: '等級', sortable: true, render: v => <SeverityBadge level={v || 'Info'} /> },
                   { key: 'epss', label: 'EPSS', sortable: true, mono: true, render: v => <span style={{ color: 'var(--critical)', fontWeight: 700 }}>{parseFloat(v).toFixed(3)}</span> },
