@@ -1,6 +1,6 @@
 #!/bin/bash
 # SecVision 快速部署腳本 — Ubuntu 24.04 / 22.04
-# 用法：bash deploy/install.sh [--db-pass <密碼>] [--admin-pass <密碼>] [--branch <分支>]
+# 用法：bash deploy/install.sh [--preflight-only] [--skip-git-update] [--db-pass <密碼>] [--admin-pass <密碼>] [--branch <分支>]
 set -euo pipefail
 
 APP_DIR=/opt/secvision
@@ -13,12 +13,16 @@ ADMIN_USER=${ADMIN_USER:-admin}
 # ── 預設值（可透過參數覆蓋）────────────────────────────────────────────────────
 DB_PASS="changeme_$(openssl rand -hex 6)"
 BRANCH=""
+PREFLIGHT_ONLY=false
+SKIP_GIT_UPDATE=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --db-pass)    DB_PASS="$2";    shift 2 ;;
     --admin-pass) ADMIN_PASS="$2"; shift 2 ;;
     --branch)     BRANCH="$2";     shift 2 ;;
+    --preflight-only) PREFLIGHT_ONLY=true; shift ;;
+    --skip-git-update) SKIP_GIT_UPDATE=true; shift ;;
     *) echo "未知參數: $1"; exit 1 ;;
   esac
 done
@@ -33,9 +37,85 @@ echo "======================================================"
 echo "  SecVision ISMS Portal 部署腳本"
 echo "======================================================"
 
+preflight_check() {
+  local failed=0
+
+  echo ""
+  echo "=== Preflight: 部署前環境確認 ==="
+
+  if [[ -r /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    echo "  OS: ${PRETTY_NAME:-unknown}"
+    if [[ "${ID:-}" != "ubuntu" || ! " ${VERSION_ID:-} " =~ ^\ (22\.04|24\.04)\  ]]; then
+      echo "  ⚠️  建議部署環境為 Ubuntu 22.04 或 24.04；目前為 ${PRETTY_NAME:-unknown}"
+    fi
+  else
+    echo "  ⚠️  無法讀取 /etc/os-release，略過 OS 版本確認"
+  fi
+
+  for cmd in bash awk sed grep openssl git curl; do
+    if command -v "$cmd" >/dev/null 2>&1; then
+      echo "  ✅ command: $cmd"
+    else
+      echo "  ❌ 缺少必要指令: $cmd"
+      failed=1
+    fi
+  done
+
+  if command -v sudo >/dev/null 2>&1; then
+    echo "  ✅ command: sudo"
+  else
+    echo "  ❌ 缺少 sudo；部署腳本需要 sudo 安裝套件、建立使用者與管理 systemd/nginx"
+    failed=1
+  fi
+
+  if command -v apt >/dev/null 2>&1; then
+    echo "  ✅ command: apt"
+  else
+    echo "  ❌ 缺少 apt；此腳本僅支援 Debian/Ubuntu apt 套件管理"
+    failed=1
+  fi
+
+  if command -v systemctl >/dev/null 2>&1 && [[ -d /run/systemd/system ]]; then
+    echo "  ✅ systemd: available"
+  else
+    echo "  ❌ systemd 不可用；無法啟用 secvision.service 或 reload nginx（容器環境常見）"
+    failed=1
+  fi
+
+  if [[ -d "$REPO_DIR/backend" && -f "$REPO_DIR/backend/requirements.txt" && -f "$REPO_DIR/index.html" ]]; then
+    echo "  ✅ repo: $REPO_DIR"
+  else
+    echo "  ❌ repo 結構不完整：需包含 backend/requirements.txt 與 index.html"
+    failed=1
+  fi
+
+  if ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq ':(80|8000)$'; then
+    echo "  ⚠️  偵測到 80 或 8000 port 已被占用；部署時可能需要先釋放連線"
+  else
+    echo "  ✅ ports: 80/8000 未偵測到 LISTEN"
+  fi
+
+  if [[ $failed -ne 0 ]]; then
+    echo "  ❌ Preflight 失敗；請先修正上述環境問題後再執行部署"
+    return 1
+  fi
+
+  echo "  ✅ Preflight 通過，可以開始自動安裝與服務啟用"
+}
+
+preflight_check
+if [[ "$PREFLIGHT_ONLY" == "true" ]]; then
+  echo "=== Preflight-only 模式結束，未修改系統 ==="
+  exit 0
+fi
+
 echo ""
 echo "=== 0. 更新程式碼至最新版 ==="
-if git -C "$REPO_DIR" rev-parse --git-dir > /dev/null 2>&1; then
+if [[ "$SKIP_GIT_UPDATE" == "true" ]]; then
+  echo "  已指定 --skip-git-update，跳過 git fetch/checkout/pull"
+elif git -C "$REPO_DIR" rev-parse --git-dir > /dev/null 2>&1; then
   # 若未指定分支，使用目前所在分支
   if [[ -z "$BRANCH" ]]; then
     BRANCH=$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")

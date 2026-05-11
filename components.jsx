@@ -209,9 +209,12 @@ function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeig
 
   const sorted = React.useMemo(() => {
     if (serverSide || !activeSortCol) return rows;
+    const severityOrder = { Critical: 0, High: 1, Medium: 2, Low: 3, Info: 4 };
     return [...rows].sort((a, b) => {
       const va = a[activeSortCol] ?? '', vb = b[activeSortCol] ?? '';
-      const cmp = String(va).localeCompare(String(vb), 'zh-TW', { numeric: true });
+      const cmp = activeSortCol === 'risk'
+        ? (severityOrder[va] ?? 99) - (severityOrder[vb] ?? 99)
+        : String(va).localeCompare(String(vb), 'zh-TW', { numeric: true });
       return activeSortDir === 'asc' ? cmp : -cmp;
     });
   }, [rows, activeSortCol, activeSortDir, serverSide]);
@@ -224,6 +227,22 @@ function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeig
       prevRowsLen.current = rows.length;
     }
   }, [rows.length]);
+
+  const getSortHint = col => {
+    if (!col.sortable) return col.help || '';
+    const direction = activeSortCol === col.key && activeSortDir === 'asc' ? 'desc' : 'asc';
+    const directionText = col.key === 'risk'
+      ? (direction === 'asc' ? '風險由高到低' : '風險由低到高')
+      : (direction === 'asc' ? '由小到大 / A→Z' : '由大到小 / Z→A');
+    return `${col.help ? col.help + '。' : ''}點擊以${directionText}排序`;
+  };
+
+  const getSortIcon = col => {
+    if (!col.sortable) return '';
+    if (activeSortCol !== col.key) return '↕';
+    if (col.key === 'risk') return activeSortDir === 'asc' ? '高→低' : '低→高';
+    return activeSortDir === 'asc' ? '↑' : '↓';
+  };
 
   const handleSort = col => {
     if (!col.sortable) return;
@@ -257,12 +276,24 @@ function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeig
       <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
         <thead>
           <tr>
-            {columns.map(col => (
-              <th key={col.key} onClick={() => handleSort(col)}
-                style={{padding:cellPad,textAlign:'left',fontWeight:600,fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text2)',background:'var(--surface2)',borderBottom:'1px solid var(--border)',cursor:col.sortable?'pointer':'default',whiteSpace:'nowrap',position:'sticky',top:0,zIndex:1}}>
-                {col.label}{col.sortable && (activeSortCol===col.key ? (activeSortDir==='asc'?' ↑':' ↓') : ' ↕')}
-              </th>
-            ))}
+            {columns.map(col => {
+              const isActive = activeSortCol === col.key;
+              const sortIcon = getSortIcon(col);
+              return (
+                <th key={col.key}
+                  onClick={() => handleSort(col)}
+                  title={getSortHint(col)}
+                  aria-sort={isActive ? (activeSortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  scope="col"
+                  style={{padding:cellPad,textAlign:'left',fontWeight:600,fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:isActive?'var(--accent)':'var(--text2)',background:isActive?'var(--accent-bg)':'var(--surface2)',borderBottom:`1px solid ${isActive?'var(--accent)':'var(--border)'}`,cursor:col.sortable?'pointer':'default',whiteSpace:'nowrap',position:'sticky',top:0,zIndex:1}}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span>{col.label}</span>
+                    {col.help && <span style={{ fontSize: 10, color: isActive ? 'var(--accent)' : 'var(--text3)', textTransform: 'none', letterSpacing: 0 }}>ⓘ</span>}
+                    {col.sortable && <span style={{ fontSize: col.key === 'risk' && isActive ? 10 : 11, color: isActive ? 'var(--accent)' : 'var(--text3)', textTransform: 'none', letterSpacing: 0 }}>{sortIcon}</span>}
+                  </span>
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>

@@ -5,7 +5,7 @@ import math
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from sqlalchemy import insert, nulls_last, or_, desc
+from sqlalchemy import case, insert, nulls_last, or_, desc
 from sqlalchemy.orm import Session, load_only, selectinload
 
 from database import get_db
@@ -21,6 +21,13 @@ from services.epss_service import fetch_epss_scores
 router = APIRouter(prefix="/api/scans", tags=["scans"])
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
+
+RISK_SORT_ORDER = ("Critical", "High", "Medium", "Low", "Info")
+RISK_SORT_CASE = case(
+    *[(Vulnerability.risk == risk, index) for index, risk in enumerate(RISK_SORT_ORDER)],
+    else_=len(RISK_SORT_ORDER),
+)
 
 
 def _finite_or_none(value):
@@ -159,7 +166,7 @@ def list_scan_vulns(
     search: str | None = Query(None, description="Search host/name/plugin_id/CVE."),
     risk: str | None = Query(None, description="Filter by severity."),
     hosts: str | None = Query(None, description="Comma-separated host filter."),
-    sort_by: str | None = Query(None, description="Sort field."),
+    sort_by: str | None = Query('risk', description="Sort field. Defaults to risk severity (Critical → Info)."),
     sort_dir: str = Query('asc', pattern='^(asc|desc)$'),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
@@ -182,10 +189,11 @@ def list_scan_vulns(
         'epss': Vulnerability.epss,
         'vpr': Vulnerability.vpr,
     }
-    order_col = sort_map.get(sort_by, Vulnerability.host)
+    order_col = RISK_SORT_CASE if sort_by == 'risk' else sort_map.get(sort_by, Vulnerability.host)
     order = desc(order_col) if sort_dir == 'desc' else order_col
+    secondary_order = Vulnerability.host if sort_by != 'host' else Vulnerability.plugin_id
 
-    items = q.order_by(order).offset((page - 1) * page_size).limit(page_size).all()
+    items = q.order_by(order, secondary_order, Vulnerability.plugin_id).offset((page - 1) * page_size).limit(page_size).all()
     return VulnerabilityPage(
         scan_id=scan_id,
         total=total,
@@ -209,7 +217,7 @@ def list_scan_vuln_matrix(
         raise HTTPException(status_code=404, detail="Scan not found")
 
     q = _query_scan_vulns(scan_id, db, search=search, risk=risk, hosts=hosts)
-    return q.order_by(Vulnerability.host).all()
+    return q.order_by(RISK_SORT_CASE, Vulnerability.host, Vulnerability.plugin_id).all()
 
 
 @router.get("/{scan_id}/vulns/{vuln_id}", response_model=VulnerabilityOut)
