@@ -26,11 +26,16 @@ if [[ ! "$ROLE" =~ ^(admin|analyst|viewer)$ ]]; then
 fi
 
 # 密碼強度最低檢查（與 API PasswordChange 驗證器一致）
+# Bash 的 [[ string =~ regex ]] 會先解析右側 regex；將特殊字元集合放在變數中，
+# 可避免 &, !, ?, -, ^ 等字元在條件式中被 shell 誤解析。
 _pw_ok=true
-[[ ${#PASSWORD} -lt 8 ]]               && _pw_ok=false && echo "⚠️  密碼長度不足 8 字元"
-[[ ! "$PASSWORD" =~ [A-Z] ]]           && _pw_ok=false && echo "⚠️  密碼缺少大寫字母"
-[[ ! "$PASSWORD" =~ [0-9] ]]           && _pw_ok=false && echo "⚠️  密碼缺少數字"
-[[ ! "$PASSWORD" =~ [@\$\!%\*\?&_\-#\^] ]] && _pw_ok=false && echo "⚠️  密碼缺少特殊字元 (@\$!%*?&_-#^)"
+_upper_re='[A-Z]'
+_digit_re='[0-9]'
+_special_re='[@$!%*?&_#^-]'
+[[ ${#PASSWORD} -lt 8 ]]              && _pw_ok=false && echo "⚠️  密碼長度不足 8 字元"
+[[ ! "$PASSWORD" =~ $_upper_re ]]     && _pw_ok=false && echo "⚠️  密碼缺少大寫字母"
+[[ ! "$PASSWORD" =~ $_digit_re ]]     && _pw_ok=false && echo "⚠️  密碼缺少數字"
+[[ ! "$PASSWORD" =~ $_special_re ]]   && _pw_ok=false && echo "⚠️  密碼缺少特殊字元 (@\$!%*?&_-#^)"
 if [[ "$_pw_ok" == false ]]; then
   echo "⚠️  密碼不符合強度要求，建議使用符合規範的密碼（此腳本仍會繼續建立帳號）"
 fi
