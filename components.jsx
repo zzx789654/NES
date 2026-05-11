@@ -209,9 +209,12 @@ function DataTable({ columns, rows, onRowClick, emptyText = '無資料', maxHeig
 
   const sorted = React.useMemo(() => {
     if (serverSide || !activeSortCol) return rows;
+    const severityOrder = { Critical: 0, High: 1, Medium: 2, Low: 3, Info: 4 };
     return [...rows].sort((a, b) => {
       const va = a[activeSortCol] ?? '', vb = b[activeSortCol] ?? '';
-      const cmp = String(va).localeCompare(String(vb), 'zh-TW', { numeric: true });
+      const cmp = activeSortCol === 'risk'
+        ? (severityOrder[va] ?? 99) - (severityOrder[vb] ?? 99)
+        : String(va).localeCompare(String(vb), 'zh-TW', { numeric: true });
       return activeSortDir === 'asc' ? cmp : -cmp;
     });
   }, [rows, activeSortCol, activeSortDir, serverSide]);

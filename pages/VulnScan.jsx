@@ -337,7 +337,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
   const [detail, setDetail] = useState(null);
   const [scanHosts, setScanHosts] = useState([]);
   const [vulnPage, setVulnPage] = useState({ items: [], total: 0, page: 1, page_size: 200 });
-  const [sortBy, setSortBy] = useState('host');
+  const [sortBy, setSortBy] = useState('risk');
   const [sortDir, setSortDir] = useState('asc');
   const [diffData, setDiffData] = useState(null);
   const [diffBase, setDiffBase] = useState(null);

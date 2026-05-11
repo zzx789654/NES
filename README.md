@@ -436,3 +436,58 @@ ALLOWED_ORIGINS=https://yourdomain.com
 ## 授權
 
 Internal use only.
+
+---
+
+## 2026-05-11 驗證更新：自動安裝、矩陣讀取與風險排序
+
+### 架構與功能確認
+
+- **前端**：`index.html` 以靜態方式載入 `api-client.js`、`components.jsx`、`pages/*.jsx` 與 `app.jsx`；弱點掃描主流程位於 `pages/VulnScan.jsx`。
+- **API Client**：`api-client.js` 封裝 JWT Bearer Token、弱點掃描清單、弱點分頁、矩陣資料、差異比較與上傳 API。
+- **後端**：`backend/main.py` 啟動 FastAPI，並註冊 `auth`、`scans`、`nist`、`dashboard`、`ipgroups`、`report` routers。
+- **弱點掃描資料流**：Nessus CSV / NVD JSON → `backend/routers/scans.py` 上傳端點 → `backend/services/nessus_parser.py` / `cve_parser.py` 解析 → SQLAlchemy `Scan` / `Vulnerability` → `/api/scans/{id}/vulns` 與 `/api/scans/{id}/vuln-matrix` 提供前端表格與矩陣。
+- **部署資料流**：`deploy/install.sh` 進行環境確認、系統套件安裝、PostgreSQL 初始化、後端 venv 建置、Alembic migration、管理者建立、前端靜態檔部署、systemd / Nginx 啟用與 smoke test。
+
+### 自動安裝與部署流程
+
+部署前請先執行 preflight，只檢查環境、不修改系統：
+
+```bash
+bash deploy/install.sh --preflight-only --skip-git-update
+```
+
+正式部署範例：
+
+```bash
+bash deploy/install.sh \
+  --db-pass '<strong-db-password>' \
+  --admin-pass '<Admin@ChangeMe123>' \
+  --branch main
+```
+
+可用參數：
+
+| 參數 | 說明 |
+|------|------|
+| `--preflight-only` | 只執行部署前環境確認，不安裝套件、不建立服務、不修改系統。 |
+| `--skip-git-update` | 跳過 `git fetch/checkout/pull`，適合驗證本機工作樹或離線部署包。 |
+| `--db-pass <密碼>` | 指定 PostgreSQL `secvision` 使用者密碼；未指定時自動產生。 |
+| `--admin-pass <密碼>` | 指定預設管理者密碼；未指定時自動產生符合密碼政策的強密碼。 |
+| `--branch <分支>` | 指定部署前更新的 Git 分支；未指定時使用目前分支。 |
+
+Preflight 會確認 OS、必要指令、`sudo`、`apt`、systemd、repo 結構與 80/8000 port 狀態。容器環境若沒有 systemd，preflight 會明確失敗，避免進入半部署狀態；正式啟用服務請在 Ubuntu 22.04 / 24.04 主機執行。
+
+### 矩陣資料讀取驗證
+
+矩陣資料由 `/api/scans/{scan_id}/vuln-matrix` 提供，回傳前端 EPSS vs CVSS 與 VPR vs CVSS 圖表需要的 `risk`、`host`、`name`、`cve`、`cvss_v3_base`、`epss`、`vpr` 等欄位。後端測試 `backend/tests/test_vuln_ordering.py` 會驗證矩陣端點可讀取分數欄位，且排序維持 Critical → High → Medium → Low → Info。
+
+### 弱點掃描風險排序
+
+弱點掃描資料表預設依風險等級由危險到資訊排序：
+
+```text
+Critical → High → Medium → Low → Info
+```
+
+後端 `/api/scans/{scan_id}/vulns` 的預設 `sort_by` 已改為 `risk`，並使用固定風險權重排序，避免字母排序造成 `Info`、`Low`、`Medium` 順序錯誤。前端資料表預設排序欄位同步改為風險等級；本地 DataTable 排序也使用相同權重，讓矩陣優先修補清單等非 server-side 表格行為一致。
