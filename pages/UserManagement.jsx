@@ -284,6 +284,18 @@
 
   // ── 新增使用者（admin） ───────────────────────────────────────────────────
 
+  function validateCreateUser(username, password) {
+    const name = username.trim();
+    if (!/^[A-Za-z0-9_]{3,50}$/.test(name)) {
+      return '使用者名稱需為 3–50 字元，且只能包含英文字母、數字與底線';
+    }
+    if (password.length < 8) return '密碼至少需要 8 個字元';
+    if (!/[A-Z]/.test(password)) return '密碼至少需要 1 個大寫英文字母';
+    if (!/[0-9]/.test(password)) return '密碼至少需要 1 個數字';
+    if (!/[@$!%*?&_#^\-]/.test(password)) return '密碼至少需要 1 個特殊字元（@$!%*?&_-#^）';
+    return '';
+  }
+
   function CreateUserCard({ onCreated }) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -295,9 +307,14 @@
     async function handleSubmit(e) {
       e.preventDefault();
       setErr(''); setOk('');
+      const validationError = validateCreateUser(username, password);
+      if (validationError) {
+        setErr(validationError);
+        return;
+      }
       setSaving(true);
       try {
-        const u = await APIClient.createUser(username, password, role);
+        const u = await APIClient.createUser(username.trim(), password, role);
         setOk(`使用者「${u.username}」建立成功`);
         setUsername(''); setPassword(''); setRole('viewer');
         onCreated();

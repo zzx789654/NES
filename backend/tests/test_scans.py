@@ -135,6 +135,30 @@ def test_list_scan_vuln_matrix(client, admin_token):
     assert len(resp2.json()) == 2
 
 
+def test_list_scan_vulns_host_filter(client, admin_token):
+    scan_id = _upload(client, admin_token).json()["id"]
+    resp = client.get(
+        f"/api/scans/{scan_id}/vulns?page=1&page_size=200&hosts=192.168.1.1&sort_by=risk&sort_dir=asc",
+        headers=auth(admin_token),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 2
+    assert {item["host"] for item in data["items"]} == {"192.168.1.1"}
+
+
+def test_list_scan_vuln_matrix_deduplicates_host_filter(client, admin_token):
+    scan_id = _upload(client, admin_token).json()["id"]
+    resp = client.get(
+        f"/api/scans/{scan_id}/vuln-matrix?hosts=192.168.1.1,192.168.1.1,,",
+        headers=auth(admin_token),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 2
+    assert {item["host"] for item in data} == {"192.168.1.1"}
+
+
 def test_delete_scan(client, admin_token):
     scan_id = _upload(client, admin_token).json()["id"]
     assert client.delete(f"/api/scans/{scan_id}", headers=auth(admin_token)).status_code == 204

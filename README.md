@@ -501,3 +501,61 @@ Critical → High → Medium → Low → Info
 - 顯示欄位保留 chip 式切換，表格標題新增輔助提示，讓 EPSS、VPR、CVSS、Plugin ID 等欄位用途更清楚。
 - 新增「重設檢視」按鈕，一次清除搜尋、等級篩選、IP 篩選並恢復風險優先排序。
 - 風險矩陣的優先修補清單改為先依風險等級、再依 EPSS 排序，讓 Critical/High 弱點優先出現在清單前方。
+
+
+## 2026-05-13 Hotfix：自動安裝 systemd / smoke test 穩定性修正
+
+本版修正自動安裝過程中，systemd 啟動後 backend 尚未可連線就執行登入驗證與 smoke test，造成 `curl: (7) Failed to connect to 127.0.0.1 port 8000` 的問題。
+
+### 修正重點
+
+- `deploy/secvision.service`
+  - 明確載入 `/opt/secvision/backend/.env`。
+  - 改用 `/opt/secvision/venv/bin/python -m uvicorn main:app` 啟動。
+  - backend 僅綁定 `127.0.0.1:8000`，由 Nginx 對外代理。
+- `deploy/install.sh`
+  - `systemctl restart secvision` 後輪詢 `/health`，成功才進入登入驗證。
+  - backend 啟動失敗時輸出 `systemctl status`、`journalctl -u secvision` 與 listening ports。
+  - 管理者登入或 smoke test 失敗會停止部署，不再誤報完成。
+- `deploy/smoke-test.sh`
+  - 加入 backend health wait 與診斷輸出。
+
+### 建議執行
+
+```bash
+cd ~/NES-main
+bash deploy/install.sh --skip-git-update
+```
+
+若再次失敗，腳本會直接列出 `secvision.service` 狀態與最近 journal，請先查看輸出的第一個 Python traceback 或 systemd failure reason。
+
+
+## 2026-05-13 Deployment Verification：自動化部署流程確認
+
+本版新增 `deploy/validate-deploy-flow.sh`，可在正式安裝前做不修改主機的靜態驗證。
+
+### 建議正式部署流程
+
+```bash
+cd ~/NES-main
+bash deploy/validate-deploy-flow.sh
+bash deploy/install.sh --preflight-only
+bash deploy/install.sh --skip-git-update
+```
+
+### 驗證涵蓋項目
+
+- 專案必要檔案是否存在。
+- `deploy/install.sh`、`deploy/smoke-test.sh`、`deploy/create-admin.sh`、`deploy/redeploy-backend.sh` shell syntax。
+- `secvision.service` 是否載入 `/opt/secvision/backend/.env` 並透過 venv Python 啟動 uvicorn。
+- Nginx 是否代理 API 至 `127.0.0.1:8000`。
+- install.sh 是否包含 backend health wait、失敗診斷、Alembic migration、admin 建立與 smoke test gate。
+- 後端主要 Python 模組語法檢查。
+
+### 完整安裝後確認
+
+```bash
+sudo systemctl status secvision --no-pager -l
+curl -fsS http://127.0.0.1:8000/health
+bash deploy/smoke-test.sh http://127.0.0.1:8000 admin '<你的管理者密碼>'
+```

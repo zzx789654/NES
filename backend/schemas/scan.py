@@ -116,6 +116,14 @@ class VulnSlim(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class VulnTable(VulnSlim):
+    synopsis: str | None = None
+    solution: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+
 class ScanBase(BaseModel):
     name: str
     source: str
@@ -151,7 +159,7 @@ class VulnerabilityPage(BaseModel):
     total: int
     page: int
     page_size: int
-    items: list[VulnSlim] = []
+    items: list[VulnTable] = []
 
     model_config = {"from_attributes": True}
 

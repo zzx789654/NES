@@ -27,6 +27,22 @@ def _scan_in_range(model, start_date: datetime, end_date: datetime):
     )
 
 
+from decimal import Decimal
+
+def _to_float(v):
+    if v is None:
+        return None
+    if isinstance(v, Decimal):
+        try:
+            return float(v)
+        except Exception:
+            return None
+    try:
+        return float(v)
+    except Exception:
+        return None
+
+
 class ReportService:
     """Generate comprehensive security reports"""
 
@@ -116,7 +132,7 @@ class ReportService:
             total_vulns += len(scan.vulnerabilities or [])
             for vuln in scan.vulnerabilities or []:
                 if vuln.epss is not None:
-                    total_epss += vuln.epss
+                    total_epss += (_to_float(vuln.epss) or 0.0)
                     epss_count += 1
         
         average_epss = (total_epss / epss_count) if epss_count > 0 else 0.0

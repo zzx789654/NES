@@ -141,3 +141,6 @@ if [[ -n "$SERVER_IP" ]]; then
   echo "==> Check remote frontend: $REMOTE_WEB_URL/index.html"
   curl -sS -I "$REMOTE_WEB_URL/index.html" | head -n 1 || true
 fi
+
+
+# NOTE: install.sh now contains the canonical backend wait/diagnostic flow.

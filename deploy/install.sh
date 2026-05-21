@@ -204,7 +204,35 @@ sudo chown -R www-data:www-data $WEB_DIR
 echo "=== 8. 安裝 systemd 服務 ==="
 sudo cp "$REPO_DIR/deploy/secvision.service" /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now secvision
+sudo systemctl reset-failed secvision >/dev/null 2>&1 || true
+sudo systemctl enable secvision
+sudo systemctl restart secvision
+
+print_backend_diagnostics() {
+  echo "--- secvision.service status ---"
+  sudo systemctl status secvision --no-pager -l || true
+  echo "--- secvision.service journal ---"
+  sudo journalctl -u secvision -n 160 --no-pager || true
+  echo "--- listening ports ---"
+  sudo ss -ltnp 2>/dev/null | grep -E ':(80|8000)\b' || true
+}
+
+wait_for_backend() {
+  local ok=0
+  for _ in $(seq 1 60); do
+    if curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1; then
+      ok=1
+      break
+    fi
+    sleep 1
+  done
+  if [[ "$ok" != "1" ]]; then
+    echo "❌ secvision backend 未正常啟動，停止後續驗證。"
+    print_backend_diagnostics
+    exit 1
+  fi
+}
+wait_for_backend
 
 echo "=== 9. 設定 Nginx ==="
 sudo cp "$REPO_DIR/deploy/nginx.conf" /etc/nginx/sites-available/secvision
@@ -218,12 +246,7 @@ sudo cp "$REPO_DIR/deploy/redeploy-backend.sh" "$REPO_DIR/deploy/create-admin.sh
 sudo chown -R secvision:secvision $APP_DIR/deploy
 
 echo "=== 10. 驗證預設管理者登入 ==="
-for i in $(seq 1 20); do
-  if curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1; then
-    break
-  fi
-  sleep 1
-done
+wait_for_backend
 
 verify_login() {
   curl -sS -o /tmp/secvision_admin_token.json -w "%{http_code}" \
@@ -246,15 +269,18 @@ if [[ "$HTTP_CODE" == "200" ]]; then
   echo "✅ 預設管理者登入驗證成功"
 else
   echo "❌ 預設管理者仍無法登入（HTTP ${HTTP_CODE}）"
-  echo "   回應內容：$(cat /tmp/secvision_admin_token.json)"
-  echo "   請檢查：sudo journalctl -u secvision -n 120 --no-pager"
+  echo "   回應內容：$(cat /tmp/secvision_admin_token.json 2>/dev/null || true)"
+  print_backend_diagnostics
+  exit 1
 fi
 
 echo "=== 11. 核心 API Smoke Test ==="
 if sudo bash "$REPO_DIR/deploy/smoke-test.sh" "http://127.0.0.1:8000" "$ADMIN_USER" "$ADMIN_PASS"; then
   echo "✅ 核心功能 Smoke Test 成功"
 else
-  echo "⚠️  Smoke Test 失敗，請檢查服務與日誌"
+  echo "❌ Smoke Test 失敗，停止部署並輸出診斷"
+  print_backend_diagnostics
+  exit 1
 fi
 
 echo ""

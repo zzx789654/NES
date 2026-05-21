@@ -330,6 +330,19 @@ function IPGroupManager({ allHosts, selectedIPs, onSelectIPs }) {
   );
 }
 
+
+
+function cvssEffective(v) {
+  // Backend VulnSlim exposes cvss_v3_base / cvss_v2_base, while the UI table
+  // uses a derived cvss_effective field. Prefer the already-derived value only
+  // when it exists, then fall back to real Nessus CVSS v3/v2 columns.
+  const candidates = [v?.cvss_effective, v?.cvss_v3_base, v?.cvss_v2_base, v?.cvss];
+  for (const value of candidates) {
+    const n = (value === null || value === undefined || value === '') ? null : Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
 function VulnScanPage({ onStatsChange, currentUser }) {
   const [tab, setTab] = useState('history');
   const [scans, setScans] = useState([]);
@@ -350,7 +363,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [sevFilter, setSevFilter] = useState('all');
-  const [visibleCols, setVisibleCols] = useState(['risk', 'host', 'port', 'plugin_id', 'name', 'cve', 'cvss_v2_base', 'cvss_v3_base', 'epss', 'vpr']);
+  const [visibleCols, setVisibleCols] = useState(['risk', 'host', 'port', 'plugin_id', 'name', 'cve', 'cvss_v2_base', 'cvss_effective', 'epss', 'vpr']);
   const [expandedRow, setExpandedRow] = useState(null);
   const [expandedVulnDetail, setExpandedVulnDetail] = useState(null);
   const [expandedLoading, setExpandedLoading] = useState(false);
@@ -589,11 +602,13 @@ function VulnScanPage({ onStatsChange, currentUser }) {
   };
 
   const selectedScan = scans.find(scan => scan.id === selectedId);
-  const vulnRows = vulnPage.items || [];
+  const vulnRows = (vulnPage.items || []).map(v => ({ ...v, cvss_effective: cvssEffective(v) }));
   const allHosts = scanHosts;
 
   const filteredVulns = vulnRows;
-  const matrixSource = tab === 'matrix' ? matrixVulns : vulnRows;
+  const matrixSource = tab === 'matrix'
+    ? (matrixVulns || []).map(v => ({ ...v, cvss_effective: cvssEffective(v) }))
+    : vulnRows;
 
   const diffRows = useMemo(() => {
     if (!diffData) return [];
@@ -638,7 +653,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
     { key: 'name', label: '弱點名稱', help: '點擊資料列可展開摘要與修補建議' },
     { key: 'cve', label: 'CVE', help: '對應 CVE 編號' },
     { key: 'cvss_v2_base', label: 'CVSS v2', help: 'CVSS v2 基礎分數' },
-    { key: 'cvss_v3_base', label: 'CVSS v3', help: 'CVSS v3 基礎分數' },
+    { key: 'cvss_effective', label: 'CVSS v3', help: 'CVSS v3 基礎分數' },
     { key: 'epss', label: 'EPSS', help: '30 天內被利用機率，≥ 0.1 以高風險標示' },
     { key: 'vpr', label: 'VPR', help: 'Tenable 漏洞優先度，≥ 7 以高風險標示' },
     { key: 'synopsis', label: '摘要' },
@@ -648,19 +663,20 @@ function VulnScanPage({ onStatsChange, currentUser }) {
   const columns = ALL_COLS.filter(c => visibleCols.includes(c.key)).map(c => ({
     ...c,
     sortable: true,
-    mono: ['host', 'port', 'plugin_id', 'cve', 'cvss_v2_base', 'cvss_v3_base', 'epss', 'vpr'].includes(c.key),
+    mono: ['host', 'port', 'plugin_id', 'cve', 'cvss_v2_base', 'cvss_effective', 'epss', 'vpr'].includes(c.key),
     render: c.key === 'risk' ? v => <SeverityBadge level={v || 'Info'} />
       : c.key === 'epss' ? v => v != null ? <span style={{ color: parseFloat(v) >= 0.1 ? 'var(--critical)' : parseFloat(v) >= 0.01 ? 'var(--warning)' : 'var(--text2)', fontWeight: parseFloat(v) >= 0.1 ? 700 : 400 }}>{parseFloat(v).toFixed(3)}</span> : <span style={{ color: 'var(--text3)' }}>—</span>
       : c.key === 'vpr' ? v => v != null ? <span style={{ color: parseFloat(v) >= 7 ? 'var(--critical)' : parseFloat(v) >= 4 ? 'var(--warning)' : 'var(--text2)', fontWeight: parseFloat(v) >= 7 ? 700 : 400 }}>{parseFloat(v).toFixed(1)}</span> : <span style={{ color: 'var(--text3)' }}>—</span>
-      : (c.key === 'cvss_v2_base' || c.key === 'cvss_v3_base') ? v => v != null ? <span style={{ color: 'var(--text2)', fontFamily: 'var(--font-mono)' }}>{parseFloat(v).toFixed(1)}</span> : <span style={{ color: 'var(--text3)' }}>—</span>
+      : (c.key === 'cvss_v2_base' || c.key === 'cvss_effective') ? v => v != null ? <span style={{ color: 'var(--text2)', fontFamily: 'var(--font-mono)' }}>{parseFloat(v).toFixed(1)}</span> : <span style={{ color: 'var(--text3)' }}>—</span>
       : c.key === 'name' ? v => <span title={v} style={{ fontWeight: 500 }}>{v?.length > 60 ? v.slice(0, 58) + '…' : v}</span>
       : undefined,
   }));
 
-  const epssVulns = useMemo(() => matrixSource.filter(v => v.epss != null && v.cvss_v3_base != null && parseFloat(v.cvss_v3_base) > 0), [matrixSource]);
-  const vprVulns = useMemo(() => matrixSource.filter(v => v.vpr != null && v.cvss_v3_base != null && parseFloat(v.cvss_v3_base) > 0), [matrixSource]);
+
+  const epssVulns = useMemo(() => matrixSource.filter(v => v.epss != null && v.cvss_effective != null && parseFloat(v.cvss_effective) > 0), [matrixSource]);
+  const vprVulns = useMemo(() => matrixSource.filter(v => v.vpr != null && v.cvss_effective != null && parseFloat(v.cvss_effective) > 0), [matrixSource]);
   const priorityRows = useMemo(() => matrixSource
-    .filter(v => parseFloat(v.cvss_v3_base || 0) >= 7 && parseFloat(v.epss || 0) >= 0.1)
+    .filter(v => parseFloat(v.cvss_effective || 0) >= 7 && parseFloat(v.epss || 0) >= 0.1)
     .sort((a, b) => {
       const sevCmp = (SEV_ORDER[a.risk] ?? 99) - (SEV_ORDER[b.risk] ?? 99);
       if (sevCmp !== 0) return sevCmp;
@@ -843,7 +859,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                         ['Plugin ID', expandedRow.plugin_id],
                         ['CVE', expandedRow.cve || '—'],
                         ['CVSS v2', expandedRow.cvss_v2_base != null ? parseFloat(expandedRow.cvss_v2_base).toFixed(1) : '—'],
-                        ['CVSS v3', expandedRow.cvss_v3_base != null ? parseFloat(expandedRow.cvss_v3_base).toFixed(1) : '—'],
+                        ['CVSS v3', expandedRow.cvss_effective != null ? parseFloat(expandedRow.cvss_effective).toFixed(1) : '—'],
                         ['EPSS', expandedRow.epss != null ? parseFloat(expandedRow.epss).toFixed(3) : '—'],
                         ['VPR', expandedRow.vpr != null ? parseFloat(expandedRow.vpr).toFixed(1) : '—'],
                       ].map(([key, value]) => (
@@ -995,7 +1011,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <QuadrantChart
                   vulns={epssVulns}
-                  xKey="cvss_v3_base"
+                  xKey="cvss_effective"
                   yKey="epss"
                   xLabel="CVSS"
                   yLabel="EPSS"
@@ -1008,7 +1024,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                 />
                 <QuadrantChart
                   vulns={vprVulns}
-                  xKey="cvss_v3_base"
+                  xKey="cvss_effective"
                   yKey="vpr"
                   xLabel="CVSS"
                   yLabel="VPR"
@@ -1029,7 +1045,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                   { key: 'risk', label: '等級', sortable: true, render: v => <SeverityBadge level={v || 'Info'} /> },
                   { key: 'epss', label: 'EPSS', sortable: true, mono: true, render: v => <span style={{ color: 'var(--critical)', fontWeight: 700 }}>{parseFloat(v).toFixed(3)}</span> },
                   { key: 'vpr', label: 'VPR', sortable: true, mono: true, render: v => <span style={{ color: parseFloat(v) >= 7 ? 'var(--critical)' : 'var(--warning)', fontWeight: 700 }}>{parseFloat(v).toFixed(1)}</span> },
-                  { key: 'cvss_v3_base', label: 'CVSS', sortable: true, mono: true },
+                  { key: 'cvss_effective', label: 'CVSS', sortable: true, mono: true },
                   { key: 'host', label: '主機', sortable: true, mono: true },
                   { key: 'name', label: '弱點名稱', render: v => <span title={v}>{v?.length > 55 ? v.slice(0, 53) + '…' : v}</span> },
                   { key: 'cve', label: 'CVE', mono: true },
@@ -1102,7 +1118,7 @@ function VulnScanPage({ onStatsChange, currentUser }) {
                           <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{row.port || '—'}</td>
                           <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{row.plugin_id || '—'}</td>
                           <td style={{ padding: '10px 12px', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.name}>{row.name || '—'}</td>
-                          <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{row.cvss_v3_base != null ? parseFloat(row.cvss_v3_base).toFixed(1) : '—'}</td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{row.cvss_effective != null ? parseFloat(row.cvss_effective).toFixed(1) : '—'}</td>
                           <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: epssHighlight ? 'var(--critical)' : 'var(--text2)', fontWeight: epssHighlight ? 700 : 400 }}>{epssVal != null ? epssVal.toFixed(3) : '—'}</td>
                           <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: vprHighlight ? 'var(--critical)' : 'var(--text2)', fontWeight: vprHighlight ? 700 : 400 }}>{vprVal != null ? vprVal.toFixed(1) : '—'}</td>
                           <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text2)' }}>{row.cve || '—'}</td>

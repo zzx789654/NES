@@ -12,14 +12,36 @@ if [[ -z "$ADMIN_PASS" ]]; then
   exit 1
 fi
 
+print_backend_diagnostics() {
+  echo "--- secvision.service status ---"
+  systemctl status secvision --no-pager -l || true
+  echo "--- secvision.service journal ---"
+  journalctl -u secvision -n 120 --no-pager || true
+  echo "--- listening ports ---"
+  ss -ltnp 2>/dev/null | grep -E ':(80|8000)\b' || true
+}
+
+wait_for_health() {
+  local ok=0
+  for _ in $(seq 1 60); do
+    if curl -fsS "$BASE_URL/health" >/dev/null 2>&1; then
+      ok=1
+      break
+    fi
+    sleep 1
+  done
+  if [[ "$ok" != "1" ]]; then
+    echo "❌ Backend health check failed: $BASE_URL/health"
+    print_backend_diagnostics
+    exit 1
+  fi
+}
+
 echo "==> Health check"
-curl -fsS "$BASE_URL/health" >/dev/null
+wait_for_health
 
 echo "==> Login"
-TOKEN=$(curl -fsS -X POST "$BASE_URL/api/auth/token" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  --data-urlencode "username=${ADMIN_USER}" \
-  --data-urlencode "password=${ADMIN_PASS}" | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+TOKEN=$(curl -fsS -X POST "$BASE_URL/api/auth/token"   -H "Content-Type: application/x-www-form-urlencoded"   --data-urlencode "username=${ADMIN_USER}"   --data-urlencode "password=${ADMIN_PASS}" | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
 
 AUTH_HEADER="Authorization: Bearer ${TOKEN}"
 

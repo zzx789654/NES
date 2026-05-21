@@ -15,13 +15,24 @@ const APIClient = (() => {
     return {};
   }
 
-  async function req(path, opts) {
-    const options = Object.assign({ headers: {} }, opts);
-    options.headers = Object.assign(
-      { 'Content-Type': 'application/json' },
-      authHeaders(),
-      options.headers
-    );
+  function formatErrorDetail(detail, fallback) {
+    if (!detail) return fallback;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+      return detail.map(item => {
+        const path = Array.isArray(item.loc) ? item.loc.filter(x => x !== 'body').join('.') : '';
+        return path ? `${path}: ${item.msg}` : (item.msg || JSON.stringify(item));
+      }).join('；');
+    }
+    if (typeof detail === 'object') {
+      return detail.msg || JSON.stringify(detail);
+    }
+    return String(detail);
+  }
+
+  const inflightGetRequests = new Map();
+
+  async function fetchJsonWithAuth(path, options) {
     const res = await fetch(path, options);
     if (res.status === 401) {
       sessionStorage.removeItem(TOKEN_KEY);
@@ -30,10 +41,45 @@ const APIClient = (() => {
     }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'HTTP ' + res.status);
+      const message = formatErrorDetail(err.detail, 'HTTP ' + res.status);
+      const error = new Error(message);
+      error.status = res.status;
+      throw error;
     }
     if (res.status === 204) return null;
     return res.json();
+  }
+
+  async function req(path, opts) {
+    const options = Object.assign({ headers: {} }, opts);
+    options.headers = Object.assign(
+      { 'Content-Type': 'application/json' },
+      authHeaders(),
+      options.headers
+    );
+    const method = (options.method || 'GET').toUpperCase();
+    const dedupeKey = method === 'GET' ? path : null;
+
+    if (dedupeKey && inflightGetRequests.has(dedupeKey)) {
+      return inflightGetRequests.get(dedupeKey);
+    }
+
+    const promise = (async () => {
+      try {
+        return await fetchJsonWithAuth(path, options);
+      } catch (err) {
+        if (method === 'GET' && err && err.status >= 500 && err.status < 600) {
+          return fetchJsonWithAuth(path, options);
+        }
+        throw err;
+      }
+    })();
+
+    if (dedupeKey) {
+      inflightGetRequests.set(dedupeKey, promise);
+      promise.finally(() => inflightGetRequests.delete(dedupeKey));
+    }
+    return promise;
   }
 
   async function reqForm(path, formData) {
@@ -49,7 +95,7 @@ const APIClient = (() => {
     }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'HTTP ' + res.status);
+      throw new Error(formatErrorDetail(err.detail, 'HTTP ' + res.status));
     }
     return res.json();
   }
@@ -74,7 +120,7 @@ const APIClient = (() => {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || '帳號或密碼錯誤');
+        throw new Error(formatErrorDetail(err.detail, '帳號或密碼錯誤'));
       }
       const data = await res.json();
       sessionStorage.setItem(TOKEN_KEY, data.access_token);

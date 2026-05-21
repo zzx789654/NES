@@ -489,7 +489,9 @@ function ReportPreview({ config, stats }) {
         )}
       </div>
 
-      {config.modules.map(moduleId => renderModule(moduleId))}
+      {config.modules.map(moduleId => (
+        <React.Fragment key={moduleId}>{renderModule(moduleId)}</React.Fragment>
+      ))}
 
       <div style={{ marginTop: 24, fontSize: 11, color: '#999', borderTop: '1px solid #ddd', paddingTop: 12 }}>
         本報表由 SecVision ISMS Portal 自動生成，僅供內部使用。

@@ -40,14 +40,30 @@ def _finite_or_none(value):
     return value
 
 
+def _parse_hosts_filter(hosts: str | None) -> list[str]:
+    """Parse and de-duplicate comma-separated host filters from the UI."""
+    if not hosts:
+        return []
+    values: list[str] = []
+    seen: set[str] = set()
+    for raw in hosts.split(','):
+        host = raw.strip()
+        if not host or host in seen:
+            continue
+        seen.add(host)
+        values.append(host)
+    if len(values) > 500:
+        raise HTTPException(status_code=400, detail="Too many hosts in filter")
+    return values
+
+
 def _query_scan_vulns(scan_id: int, db: Session, search: str | None = None, risk: str | None = None, hosts: str | None = None):
     q = db.query(Vulnerability).filter(Vulnerability.scan_id == scan_id)
     if risk:
         q = q.filter(Vulnerability.risk == risk)
-    if hosts:
-        host_values = [h.strip() for h in hosts.split(',') if h.strip()]
-        if host_values:
-            q = q.filter(Vulnerability.host.in_(host_values))
+    host_values = _parse_hosts_filter(hosts)
+    if host_values:
+        q = q.filter(Vulnerability.host.in_(host_values))
     if search:
         term = f"%{search.strip().lower()}%"
         q = q.filter(
@@ -193,7 +209,13 @@ def list_scan_vulns(
     order = desc(order_col) if sort_dir == 'desc' else order_col
     secondary_order = Vulnerability.host if sort_by != 'host' else Vulnerability.plugin_id
 
-    items = q.order_by(order, secondary_order, Vulnerability.plugin_id).offset((page - 1) * page_size).limit(page_size).all()
+    items = (
+        q.options(load_only(*_SLIM_COLS))
+        .order_by(order, secondary_order, Vulnerability.plugin_id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
     return VulnerabilityPage(
         scan_id=scan_id,
         total=total,
@@ -217,7 +239,11 @@ def list_scan_vuln_matrix(
         raise HTTPException(status_code=404, detail="Scan not found")
 
     q = _query_scan_vulns(scan_id, db, search=search, risk=risk, hosts=hosts)
-    return q.order_by(RISK_SORT_CASE, Vulnerability.host, Vulnerability.plugin_id).all()
+    return (
+        q.options(load_only(*_SLIM_COLS))
+        .order_by(RISK_SORT_CASE, Vulnerability.host, Vulnerability.plugin_id)
+        .all()
+    )
 
 
 @router.get("/{scan_id}/vulns/{vuln_id}", response_model=VulnerabilityOut)
