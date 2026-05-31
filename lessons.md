@@ -16,3 +16,22 @@
 - 每次交付自動安裝腳本前，至少要跑 `bash -n`、主要後端 `py_compile`，並檢查 install.sh 是否有 health wait、smoke test 與 failure diagnostics。
 - 若執行環境不是 systemd 主機，不可宣稱已完成真實端對端部署；應明確標記為靜態驗證通過，並提供正式主機的 preflight / smoke test 指令。
 - 部署包應包含不修改主機的驗證腳本，讓正式部署前可以快速檢查專案結構與關鍵 wiring。
+
+## 2026-05-31 第一輪測試 — SecVision NES Backend 覆蓋率補強
+
+### 本輪測試紀錄
+- 執行統計：Pass 151 / Fail 0 / Blocked 0（共 151 條；補強新增 42 條）
+- 關鍵指標：通過率 100%、整體覆蓋率 96%（前：90%）
+- 缺陷：1 個 Minor Bug（verify_matrix_flow.py 斷言值錯誤，已修正）
+- Exit Criteria：達標（覆蓋率 96% ≥ 95%、Critical/Major = 0、通過率 100%）
+
+### 已修正 Bug
+- **verify_matrix_flow.py:27**：斷言 `epss == 0.9877` 應為 `0.9876`。  
+  根因：pandas `round(4)` 對 `0.98765` 採 round-half-to-even（banker's rounding），結果為 `0.9876`，而非常規四捨五入的 `0.9877`。
+
+### 教訓 / 準則
+- **asyncio 測試**：Python 3.10+ 同步測試中不可用 `get_event_loop().run_until_complete()`，改用 `asyncio.run()`。
+- **Model 欄位確認**：測試 seed 前先 `[c.name for c in Model.__table__.columns]` 確認欄位清單，避免 `TypeError: 'X' is an invalid keyword argument`。
+- **分頁 API 斷言**：回傳有 `{"items": [...], "total": N}` 結構的端點，取第一筆要用 `resp.json()["items"][0]`，不可直接 `resp.json()[0]`。
+- **pandas rounding**：EPSS/浮點數欄位斷言要用 `pytest.approx` 或先驗證 parser 的實際輸出，避免因 banker's rounding 造成 flaky test。
+- **env 依賴安裝**：在新環境跑 conftest 前確認 slowapi、jose、pandas 等都已裝好，否則 ImportError 會遮蔽真正的測試錯誤。

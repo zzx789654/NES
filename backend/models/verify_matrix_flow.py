@@ -24,7 +24,7 @@ def test_matrix_data_parsing_verification():
 
     # 2. 驗證精度處理 (Rounding)
     # EPSS 應取 4 位，VPR 應取 1 位
-    assert vulns[0]["epss"] == 0.9877
+    assert vulns[0]["epss"] == 0.9876  # pandas rounds 0.98765 → 0.9876 (round-half-to-even)
     assert vulns[0]["vpr"] == 9.8
 
     # 3. 驗證空值處理 (NaN handling)
