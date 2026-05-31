@@ -500,6 +500,15 @@ function ReportPreview({ config, stats }) {
   );
 }
 
+function escHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function downloadFile(filename, content, mimeType) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -570,15 +579,15 @@ function buildReportHtml(config, stats) {
   const moduleRows = config.modules.map(moduleId => {
     const module = REPORT_MODULES[moduleId];
     const summary = {
-      risk_overview: `Critical: ${riskData?.critical ?? 0}，High: ${riskData?.high ?? 0}，Medium: ${riskData?.medium ?? 0}，Low: ${riskData?.low ?? 0}，Info: ${riskData?.info ?? 0}`,
-      compliance: `Passed: ${complianceData?.passed ?? 0}，Failed: ${complianceData?.failed ?? 0}，Pass Rate: ${complianceData?.pass_rate ?? 0}%`,
-      scan_efficiency: `掃描次數: ${scanData?.scan_count ?? 0}，發現弱點: ${scanData?.vulnerability_count ?? 0}，平均 EPSS: ${(scanData?.average_epss ?? 8.2).toFixed(2)}`,
-      remediation_progress: `修復率：${(remediationData?.remediation_rate || 42).toFixed(1)}%，平均修復週期：${(remediationData?.average_remediation_days || 14).toFixed(1)} 天，未完成項目：${remediationData?.pending_count ?? 18} 項`,
-      audit_log: `本期操作數：${auditData?.operation_count ?? 234}，異常檢測：${auditData?.anomaly_count ?? 3}，權限變更：${auditData?.permission_changes ?? 2}`,
+      risk_overview: `Critical: ${escHtml(riskData?.critical ?? 0)}，High: ${escHtml(riskData?.high ?? 0)}，Medium: ${escHtml(riskData?.medium ?? 0)}，Low: ${escHtml(riskData?.low ?? 0)}，Info: ${escHtml(riskData?.info ?? 0)}`,
+      compliance: `Passed: ${escHtml(complianceData?.passed ?? 0)}，Failed: ${escHtml(complianceData?.failed ?? 0)}，Pass Rate: ${escHtml(complianceData?.pass_rate ?? 0)}%`,
+      scan_efficiency: `掃描次數: ${escHtml(scanData?.scan_count ?? 0)}，發現弱點: ${escHtml(scanData?.vulnerability_count ?? 0)}，平均 EPSS: ${escHtml((scanData?.average_epss ?? 8.2).toFixed(2))}`,
+      remediation_progress: `修復率：${escHtml((remediationData?.remediation_rate || 42).toFixed(1))}%，平均修復週期：${escHtml((remediationData?.average_remediation_days || 14).toFixed(1))} 天，未完成項目：${escHtml(remediationData?.pending_count ?? 18)} 項`,
+      audit_log: `本期操作數：${escHtml(auditData?.operation_count ?? 234)}，異常檢測：${escHtml(auditData?.anomaly_count ?? 3)}，權限變更：${escHtml(auditData?.permission_changes ?? 2)}`,
     };
     return `<section style="margin-bottom:24px;">
-      <h3 style="font-size:16px;margin-bottom:8px;">${module.icon} ${module.name}</h3>
-      <p style="margin:0 0 10px 0;color:#555;">${module.description}</p>
+      <h3 style="font-size:16px;margin-bottom:8px;">${escHtml(module.icon)} ${escHtml(module.name)}</h3>
+      <p style="margin:0 0 10px 0;color:#555;">${escHtml(module.description)}</p>
       <div style="padding:12px;background:#f7f9fc;border-radius:8px;font-size:14px;color:#222;">${summary[moduleId] ?? '無可用數據'}</div>
     </section>`;
   }).join('');
@@ -587,14 +596,14 @@ function buildReportHtml(config, stats) {
 <html lang="zh-TW">
 <head>
 <meta charset="utf-8">
-<title>${config.title}</title>
+<title>${escHtml(config.title)}</title>
 <style>body{font-family:system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;line-height:1.5;color:#111;background:#fff;padding:24px;}h1{font-size:24px;margin-bottom:4px;}h2{font-size:16px;margin-top:24px;}p{margin:8px 0;}section{margin-bottom:24px;}</style>
 </head>
 <body>
   <header>
-    <h1>${config.title}</h1>
-    <p style="margin:4px 0 12px 0;color:#555;">${config.description || '由 SecVision NES 自動生成的資安報表'}</p>
-    <p style="font-size:13px;color:#777;">生成時間：${new Date(config.generatedAt).toLocaleString('zh-TW')}</p>
+    <h1>${escHtml(config.title)}</h1>
+    <p style="margin:4px 0 12px 0;color:#555;">${escHtml(config.description || '由 SecVision NES 自動生成的資安報表')}</p>
+    <p style="font-size:13px;color:#777;">生成時間：${escHtml(new Date(config.generatedAt).toLocaleString('zh-TW'))}</p>
   </header>
   ${moduleRows}
   <footer style="margin-top:40px;font-size:12px;color:#777;">SecVision ISMS Portal 報表輸出</footer>
@@ -615,15 +624,23 @@ function exportReport(config, stats) {
     alert('✅ HTML 報表已下載');
   } else if (config.exportFormat === 'pdf') {
     const html = buildReportHtml(config, stats);
-    const win = window.open();
-    if (win) {
-      win.document.write(html);
-      win.document.close();
-      win.focus();
-      win.print();
-    } else {
-      alert('⚠️ 無法開啟列印視窗，請允許彈出視窗。');
-    }
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const blobUrl = URL.createObjectURL(blob);
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = blobUrl;
+    document.body.appendChild(iframe);
+    iframe.onload = () => {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      } finally {
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+          URL.revokeObjectURL(blobUrl);
+        }, 1000);
+      }
+    };
   }
 }
 

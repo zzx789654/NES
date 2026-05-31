@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional, Any
 from sqlalchemy import Integer, String, Date, DateTime, Text, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -39,7 +39,7 @@ class AuditResult(Base):
 class SystemAuditLog(Base):
     __tablename__ = "system_audit_logs"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     action: Mapped[str] = mapped_column(String(100))
     resource: Mapped[str] = mapped_column(String(100))

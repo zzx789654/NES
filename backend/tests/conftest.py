@@ -14,6 +14,8 @@ if _BACKEND not in sys.path:
 
 # Disable rate limiting so tests can call /api/auth/token freely
 os.environ.setdefault("TESTING", "true")
+# Provide a fixed secret key for tests so config.py does not require .env
+os.environ.setdefault("SECRET_KEY", "test-secret-key-for-unit-tests-only")
 
 # Module-level imports so every fixture shares the exact same objects.
 # Importing `app` triggers model registration on Base.metadata.

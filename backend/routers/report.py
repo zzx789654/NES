@@ -1,10 +1,14 @@
 """
 Reports API router — generate and export security reports
 """
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+logger = logging.getLogger(__name__)
+
 from database import get_db
+from limiter import limiter
 from routers.auth import get_current_user
 from schemas.report import ReportRequest, ReportResponse, ReportData
 from services.report_service import ReportService
@@ -13,8 +17,10 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 
 @router.post("/generate", response_model=ReportResponse)
+@limiter.limit("10/minute")
 def generate_report(
-    request: ReportRequest,
+    request: Request,
+    body: ReportRequest,
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
@@ -32,18 +38,18 @@ def generate_report(
     - 7d, 30d, 90d: predefined ranges
     - custom: use customStart and customEnd (ISO format)
     """
-    if not request.modules:
+    if not body.modules:
         raise HTTPException(status_code=400, detail="At least one module must be selected")
-    
+
     try:
         report_data = ReportService.generate_report(
             db=db,
-            modules=request.modules,
-            time_range=request.timeRange,
-            custom_start=request.customStart,
-            custom_end=request.customEnd,
-            title=request.title,
-            description=request.description,
+            modules=body.modules,
+            time_range=body.timeRange,
+            custom_start=body.customStart,
+            custom_end=body.customEnd,
+            title=body.title,
+            description=body.description,
         )
         
         return ReportResponse(
@@ -51,7 +57,8 @@ def generate_report(
             data=report_data,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate report: {str(e)}")
+        logger.exception("Report generation failed: %s", e)
+        raise HTTPException(status_code=500, detail="Internal error generating report")
 
 
 @router.get("/modules", response_model=dict)
