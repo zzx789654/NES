@@ -1,7 +1,7 @@
 """
 Report service — generate aggregated security reports
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_, cast, Date
 from models.scan import Scan, Vulnerability
@@ -49,7 +49,7 @@ class ReportService:
     @staticmethod
     def _get_date_range(time_range: str, custom_start: str | None, custom_end: str | None):
         """Parse date range from time_range parameter"""
-        end_date = datetime.utcnow()
+        end_date = datetime.now(timezone.utc).replace(tzinfo=None)
         
         if time_range == "custom" and custom_start and custom_end:
             start_date = datetime.fromisoformat(custom_start)
@@ -206,7 +206,7 @@ class ReportService:
         report_data = {
             "title": title,
             "description": description,
-            "generated_at": datetime.utcnow(),
+            "generated_at": datetime.now(timezone.utc).replace(tzinfo=None),
             "modules": modules,
             "risk": None,
             "compliance": None,

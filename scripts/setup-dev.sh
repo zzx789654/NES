@@ -96,10 +96,10 @@ from passlib.context import CryptContext
 Base.metadata.create_all(bind=engine)
 db = SessionLocal()
 if not db.query(User).filter(User.username == 'admin').first():
-    hashed = CryptContext(schemes=['bcrypt'], deprecated='auto').hash('admin')
+    hashed = CryptContext(schemes=['pbkdf2_sha256'], deprecated='auto').hash('Admin@devonly1!')
     db.add(User(username='admin', hashed_pw=hashed, role='admin'))
     db.commit()
-    print('[OK] 管理員帳號已建立：admin / admin')
+    print('[OK] 管理員帳號已建立：admin / Admin@devonly1!')
 else:
     print('[SKIP] admin 帳號已存在')
 db.close()
@@ -122,6 +122,6 @@ echo "  開啟瀏覽器："
 echo "    前端：http://localhost:8080"
 echo "    API 文件：http://localhost:8000/api/docs"
 echo ""
-echo "  測試帳號：admin / admin"
+echo "  測試帳號：admin / Admin@devonly1!"
 echo "  （請勿在正式環境使用此密碼）"
 echo "======================================================"

@@ -35,3 +35,11 @@
 - **分頁 API 斷言**：回傳有 `{"items": [...], "total": N}` 結構的端點，取第一筆要用 `resp.json()["items"][0]`，不可直接 `resp.json()[0]`。
 - **pandas rounding**：EPSS/浮點數欄位斷言要用 `pytest.approx` 或先驗證 parser 的實際輸出，避免因 banker's rounding 造成 flaky test。
 - **env 依賴安裝**：在新環境跑 conftest 前確認 slowapi、jose、pandas 等都已裝好，否則 ImportError 會遮蔽真正的測試錯誤。
+
+## 2026-05-31 專案完整性檢查
+
+### 教訓 / 準則
+- **datetime.utcnow() 已廢棄**：Python 3.12+ 中 `datetime.utcnow()` 會產生 DeprecationWarning。需改用 `datetime.now(timezone.utc).replace(tzinfo=None)` 保持 naive datetime 行為，或直接使用 timezone-aware datetime。每次新增時間戳欄位時立即使用新寫法。
+- **Nginx CSP 要與前端 CDN 同步**：前端若從 unpkg/jsdelivr 載入 React、Babel、Chart.js，nginx.conf 的 CSP 必須明確放行這些 CDN，否則瀏覽器會阻擋資源載入。每次新增外部 CDN 資源時，同步更新 CSP。
+- **開發腳本密碼強度**：setup-dev.sh 的開發用密碼若不符合應用程式自身的密碼驗證規則，會誤導開發者（他們會認為 `admin/admin` 是有效格式）。開發腳本使用的密碼應與正式密碼強度規則一致。
+- **passlib scheme 一致性**：app 使用 pbkdf2_sha256（主）+ bcrypt（deprecated），setup 腳本應使用同一主 scheme，避免無謂的 scheme migration 開銷。
