@@ -3,8 +3,17 @@
 set -euo pipefail
 
 USERNAME=${1:-admin}
-PASSWORD=${2:-Admin@123456}
 ROLE=${3:-admin}
+
+# 不提供預設密碼，強制呼叫者明確傳入
+if [[ -z "${2:-}" ]]; then
+  echo "用法: $0 [USERNAME] PASSWORD [ROLE]"
+  echo "  USERNAME  預設 admin"
+  echo "  PASSWORD  必填，不提供預設值（避免弱密碼上線）"
+  echo "  ROLE      admin / analyst / viewer，預設 admin"
+  exit 1
+fi
+PASSWORD="${2}"
 
 APP_DIR=/opt/secvision
 BACKEND_DIR="$APP_DIR/backend"
