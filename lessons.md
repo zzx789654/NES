@@ -116,3 +116,33 @@
 - **Nginx CSP 要與前端 CDN 同步**：前端若從 unpkg/jsdelivr 載入 React、Babel、Chart.js，nginx.conf 的 CSP 必須明確放行這些 CDN，否則瀏覽器會阻擋資源載入。每次新增外部 CDN 資源時，同步更新 CSP。
 - **開發腳本密碼強度**：setup-dev.sh 的開發用密碼若不符合應用程式自身的密碼驗證規則，會誤導開發者（他們會認為 `admin/admin` 是有效格式）。開發腳本使用的密碼應與正式密碼強度規則一致。
 - **passlib scheme 一致性**：app 使用 pbkdf2_sha256（主）+ bcrypt（deprecated），setup 腳本應使用同一主 scheme，避免無謂的 scheme migration 開銷。
+
+---
+
+## 2026-05-31 輪結 — 上線完成收尾（NES SecVision ISMS Portal）
+
+### 現況
+- **全部關卡通過（G1 G2 G3 G4）→ 結案**
+- 下一步：正式主機執行 `bash deploy/install.sh --preflight-only` 確認環境，再跑完整安裝
+
+### PM 摘要
+- 功能 Exit Criteria：所有 Router 功能已實作並通過測試，覆蓋率 97%
+- 安全 Exit Criteria：SAST 7 項弱點全修補（High×2、Medium×2、Low×3）；Critical CVE = 0
+- 品質 Exit Criteria：169/169 Pass（100%）；Critical/Major 缺陷 = 0
+
+### DevSecOps
+- 弱點統計：High 2 / Medium 2 / Low 3 → **全部修補**
+- 最終新增：nginx.conf HTTPS block 內 X-XSS-Protection 修正為 `"0"`（與 HTTP block 一致）
+- 新增 `.env.example`：補齊 SECRET_KEY、DATABASE_URL、ALLOWED_ORIGINS 必填欄位說明
+
+### QA
+- Pass 169 / Fail 0 / Blocked 0；通過率 100%；覆蓋率 97%
+
+### 教訓 / 準則
+1. **注解掉的 config block 也要維護**：nginx.conf 的 HTTPS block 雖被注解，如果包含舊的安全標頭值（如 `X-XSS-Protection: 1; mode=block`），啟用時會引入已知弱點。注解 block 也要與主 block 同步維護。
+2. **`.env.example` 要在專案初期就建立**：讓新進部署者清楚哪些是必填環境變數，避免用預設值啟動。
+
+### 過程原始輸出位置
+- 測試結果：`cd backend && python -m pytest -q` 即可重現
+- SAST 檢查：`待修改.md` 十一節
+- 部署腳本驗證：`bash deploy/validate-deploy-flow.sh`
